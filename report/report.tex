@@ -1,0 +1,78 @@
+\documentclass[10pt,conference]{IEEEtran}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage[font=footnotesize]{caption}
+\graphicspath{{../results/}}
+
+\begin{document}
+
+\title{Critic-Free Group-Relative Policy Optimization\\for Anti-Sway Control of a Double-Pendulum Crane}
+
+\author{\IEEEauthorblockN{TEAM MEMBER 1, TEAM MEMBER 2}
+\IEEEauthorblockA{GitHub: \url{https://github.com/Zephyr-sue/rl_crane_antisway}}}
+
+\maketitle
+
+\begin{abstract}
+We formulate anti-sway transport with an overhead crane, where a trolley carries a hook and a payload (a double pendulum), as a continuous-control RL problem. Payload mass, cable lengths, initial sway and wind gusts are randomized. We adapt \emph{Group Relative Policy Optimization} (GRPO)~\cite{grpo}, originally proposed for LLM reasoning, to physical control. GRPO has no value network: $G$ rollouts replay the \emph{same} randomized scenario on a GPU-batched simulator and serve as each other's baseline. %RESULTS_ABSTRACT%
+\end{abstract}
+
+\section{Problem and Environment}
+\textbf{Dynamics.} The state is $q=[x,\theta_1,\theta_2]$: trolley position, hook angle and payload angle. The Euler--Lagrange equations $M(q)\ddot q = F(q,\dot q) + \tau$ are taken from~\cite{qiang2021}, with viscous damping. They are integrated with RK4 at $\Delta t=0.02$\,s and are valid for large angles. A horizontal gust $F_d$ on the payload enters through $\tau = J^\top F_d = F_d[1,\,L_1\cos\theta_1,\,L_2\cos\theta_2]^\top$. Tests check energy conservation without damping (drift $<10^{-3}$) and that the energy change equals the gust's work.
+
+\textbf{Task.} An episode lasts 12\,s (600 steps). Its \emph{scenario} is sampled at reset:
+\begin{itemize}
+\item payload $m_2\!\in\![0.5,4]$\,kg and cable lengths $L_1\!\in\![0.6,1.4]$\,m, $L_2\!\in\![0.4,1.2]$\,m;
+\item a target at a distance of $\pm[1,4]$\,m;
+\item initial sway up to $\pm30^\circ$;
+\item up to three gusts of 2--6\,N lasting 0.2--0.5\,s.
+\end{itemize}
+The gust schedule is pre-sampled, so the scenario is exactly replayable. End-stops at $|x|=6$\,m stop the trolley. During training a curriculum widens all ranges from 30\% to 100\% over the first 30\% of training.
+
+\section{RL Formulation}
+\textbf{State space $\mathcal S\subset\mathbb R^{13}$.} The observation is
+$s=[e,\dot x,\sin\theta_1,\cos\theta_1,\dot\theta_1,\sin\theta_2,\cos\theta_2,\dot\theta_2,e_p,u_{t-1},m_2,L_1,L_2]$, with every entry normalized:
+\begin{itemize}
+\item $e=x-x^\ast$ is the trolley's position error;
+\item $e_p$ is the payload's horizontal position error;
+\item $u_{t-1}$ is the previous action;
+\item $(m_2,L_1,L_2)$ are the plant parameters, as measured by a load cell and a rope encoder. An ablation hides them (10-D).
+\end{itemize}
+Sin/cos encoding avoids angle wrap-around.
+
+\textbf{Action space $\mathcal A=[-1,1]$} (continuous). The trolley force is $F=30u$\,N.
+
+\textbf{Reward.} With settled indicator $\sigma_t$ ($|e|<5$\,cm, $|\theta_{1,2}|<2^\circ$, $|\dot x|<5$\,cm/s):
+\begin{align*}
+r_t = &-\big[|e| + 0.05\dot x^2 + 2(\theta_1^2+\theta_2^2) + 0.1(\dot\theta_1^2+\dot\theta_2^2)\\
+&+ 0.01u^2 + 0.1(u_t-u_{t-1})^2\big] - 0.1(1-\sigma_t) + \sigma_t - 10\,\mathbb 1_{\text{end-stop}}.
+\end{align*}
+The linear $|e|$ term gives a constant pull toward the target, and together with the per-step time cost it rewards \emph{fast} transport. The sway and rate terms penalize the coupled oscillations. The $\Delta u$ term asks for smooth force. The settle bonus rewards finishing with the payload at rest.
+
+\section{Algorithms}
+\textbf{GRPO for control (ours).} Each iteration samples $N=64$ scenarios (``prompts''). For each one it rolls out $G=32$ trajectories (``outputs'') of a Gaussian MLP policy (2$\times$128, tanh), giving 2048 cranes simulated in parallel in PyTorch on the GPU. There is \emph{no critic}. Advantages are group-relative, and we compare three variants:
+\begin{itemize}
+\item \emph{outcome}~\cite{grpo}: $\hat A_{i}=(R_i-\bar R)/\sigma_R$;
+\item \emph{process}~\cite{grpo}: the suffix sum of group-normalized rewards;
+\item \emph{rtg} (ours, default): the discounted return-to-go, normalized across the group \emph{at each timestep}, $\hat A_{i,t}=(G_{i,t}-\overline{G_{\cdot,t}})/\sigma_{G_{\cdot,t}}$. This is a per-time baseline suited to dense rewards.
+\end{itemize}
+Because all members of a group share the scenario, the baseline removes variance due to the plant and the disturbances. The loss is the GRPO objective (clipped ratio, $\epsilon=0.2$) with the unbiased KL estimator $\frac{\pi_{ref}}{\pi}-\log\frac{\pi_{ref}}{\pi}-1$ ($\beta=0.04$). The reference policy is refreshed every 10 iterations (iterative GRPO).
+
+\textbf{RL baselines.} PPO~\cite{ppo} (16 envs, GAE, reward normalization) and SAC~\cite{sac}, both from Stable-Baselines3, use the same environment, curriculum and validation set.
+
+\textbf{Classical references} (not learning; for context only). LQR is designed on the nominal linearization. The sliding-mode controller (SMC) uses a coupled surface, as in~\cite{qiang2021}.
+
+%RESULTS_SECTION%
+
+\bibliographystyle{IEEEtran}
+\begin{thebibliography}{9}
+\bibitem{grpo} Z. Shao \emph{et al.}, ``DeepSeekMath: Pushing the limits of mathematical reasoning in open language models,'' arXiv:2402.03300, 2024.
+\bibitem{qiang2021} H. Qiang, Y. Sun, J. Lyu, D. Dong, ``Anti-sway and positioning adaptive control of a double-pendulum effect crane system with neural network compensation,'' \emph{Front. Robot. AI}, vol. 8, 639734, 2021.
+\bibitem{ppo} J. Schulman \emph{et al.}, ``Proximal policy optimization algorithms,'' arXiv:1707.06347, 2017.
+\bibitem{sac} T. Haarnoja \emph{et al.}, ``Soft actor-critic: Off-policy maximum entropy deep RL with a stochastic actor,'' ICML, 2018.
+\bibitem{sb3} A. Raffin \emph{et al.}, ``Stable-Baselines3: Reliable reinforcement learning implementations,'' JMLR, 22(268), 2021.
+\end{thebibliography}
+
+\end{document}

@@ -16,6 +16,16 @@ import torch
 from models import default_path
 
 
+def checkpoint_path(args) -> str:
+    """Main runs go to models/trained/; tagged (ablation) runs to models/trained/ablations/."""
+    if args.out:
+        return args.out
+    path = default_path(args.algo, args.seed)
+    if args.tag:
+        path = os.path.join(os.path.dirname(path), "ablations", args.tag + os.path.basename(path))
+    return path
+
+
 def resolve_device(name: str) -> torch.device:
     if name == "auto":
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -34,7 +44,7 @@ def train_grpo(args, device):
     log_dir = os.path.join("runs", f"grpo_{args.tag}seed{args.seed}")
     agent = GRPO(cfg, device, log_dir)
     validator = Validator(device, observe_params=cfg.observe_params)
-    agent.train(args.out or default_path("grpo", args.seed), validate_fn=validator)
+    agent.train(checkpoint_path(args), validate_fn=validator)
 
 
 def make_sb3_callback(args, device, save_path, total_steps, log_dir):
@@ -91,7 +101,7 @@ def train_sb3(args, device):
 
     env_kwargs = {"observe_params": not args.no_params}
     log_dir = os.path.join("runs", f"{args.algo}_{args.tag}seed{args.seed}")
-    save_path = args.out or default_path(args.algo, args.seed)
+    save_path = checkpoint_path(args)
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
     if args.algo == "ppo":
