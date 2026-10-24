@@ -34,6 +34,7 @@ tb_logs/
 *.zip
 *.pt
 *.pth
+!models/trained/**
 
 # IDE
 .vscode/
