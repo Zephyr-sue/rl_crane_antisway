@@ -79,9 +79,12 @@ class CraneDynamics:
         ], dtype=np.float64)
 
         # Right-hand side vector (Forces, Coriolis, Gravity, Damping, Disturbances)
+        # A horizontal disturbance F_d acting on the payload maps to generalized
+        # forces via J^T F with payload x-position x + L1*sin(th1) + L2*sin(th2).
         # 1. Trolley row
         f_x = (
             force
+            + disturbance_force
             - self.b_x * x_dot
             + (m1 + m2) * L1 * (th1_dot ** 2) * s1
             + m2 * L2 * (th2_dot ** 2) * s2
@@ -92,6 +95,7 @@ class CraneDynamics:
             -(m1 + m2) * g * L1 * s1
             - m2 * L1 * L2 * (th2_dot ** 2) * s12
             - self.b_theta1 * th1_dot
+            + disturbance_force * L1 * c1
         )
 
         # 3. Payload angle row (wind/external disturbance acts on payload)
@@ -123,3 +127,20 @@ class CraneDynamics:
         k3 = self.compute_derivatives(state + 0.5 * dt * k2, force, disturbance_force)
         k4 = self.compute_derivatives(state + dt * k3, force, disturbance_force)
         return state + (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+
+    def total_energy(self, state: np.ndarray) -> float:
+        """Kinetic + potential energy (potential zero at the pivot height)."""
+        x, x_dot, th1, th1_dot, th2, th2_dot = state
+        M, m1, m2 = self.M, self.m1, self.m2
+        L1, L2, g = self.L1, self.L2, self.g
+        v1x = x_dot + L1 * th1_dot * np.cos(th1)
+        v1y = L1 * th1_dot * np.sin(th1)
+        v2x = v1x + L2 * th2_dot * np.cos(th2)
+        v2y = v1y + L2 * th2_dot * np.sin(th2)
+        kinetic = 0.5 * M * x_dot ** 2 + 0.5 * m1 * (v1x ** 2 + v1y ** 2) + 0.5 * m2 * (v2x ** 2 + v2y ** 2)
+        potential = -m1 * g * L1 * np.cos(th1) - m2 * g * (L1 * np.cos(th1) + L2 * np.cos(th2))
+        return float(kinetic + potential)
+
+    def payload_x(self, state: np.ndarray) -> float:
+        """Horizontal position of the payload."""
+        return float(state[0] + self.L1 * np.sin(state[2]) + self.L2 * np.sin(state[4]))
