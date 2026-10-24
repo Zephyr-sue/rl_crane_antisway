@@ -40,6 +40,8 @@ def _lerp_range(lo: float, hi: float, nominal: float, level: float):
 def sample_gusts(rng: np.random.Generator, max_steps: int, dt: float, level: float = 1.0) -> np.ndarray:
     """Piecewise-constant gust profile with up to MAX_GUSTS gusts of random sign."""
     gusts = np.zeros(max_steps, dtype=np.float64)
+    if max_steps <= int(1.0 / dt):
+        return gusts
     n_gusts = int(rng.integers(0, MAX_GUSTS + 1))
     for _ in range(n_gusts):
         start = int(rng.integers(int(1.0 / dt), max_steps))

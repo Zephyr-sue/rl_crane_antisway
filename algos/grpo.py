@@ -75,16 +75,20 @@ class GaussianPolicy(nn.Module):
         return self.net(obs).squeeze(-1).clamp(-1.0, 1.0)
 
 
-def group_advantages(rewards: torch.Tensor, mode: str, gamma: float = 0.995, eps: float = 1e-8) -> torch.Tensor:
+def _normalize(x: torch.Tensor, dim, min_std: float = 1e-6) -> torch.Tensor:
+    """(x - mean) / std over `dim`; a degenerate group (all members equal) gets zero advantage."""
+    centered = x - x.mean(dim=dim, keepdim=True)
+    std = x.std(dim=dim, keepdim=True)
+    return torch.where(std > min_std, centered / std.clamp_min(min_std), torch.zeros_like(centered))
+
+
+def group_advantages(rewards: torch.Tensor, mode: str, gamma: float = 0.995) -> torch.Tensor:
     """rewards: (T, N, G) for N groups of G trajectories. Returns advantages of the same shape."""
     if mode == "outcome":
-        R = rewards.sum(0)                                              # (N, G)
-        A = (R - R.mean(-1, keepdim=True)) / (R.std(-1, keepdim=True) + eps)
+        A = _normalize(rewards.sum(0), -1)                              # (N, G)
         return A.unsqueeze(0).expand_as(rewards)
     if mode == "process":
-        mean = rewards.mean(dim=(0, 2), keepdim=True)
-        std = rewards.std(dim=(0, 2), keepdim=True)
-        r_norm = (rewards - mean) / (std + eps)
+        r_norm = _normalize(rewards, (0, 2))
         return r_norm.flip(0).cumsum(0).flip(0)
     if mode == "rtg":
         rtg = torch.zeros_like(rewards)
@@ -92,7 +96,7 @@ def group_advantages(rewards: torch.Tensor, mode: str, gamma: float = 0.995, eps
         for t in range(rewards.shape[0] - 1, -1, -1):
             running = rewards[t] + gamma * running
             rtg[t] = running
-        return (rtg - rtg.mean(-1, keepdim=True)) / (rtg.std(-1, keepdim=True) + eps)
+        return _normalize(rtg, -1)
     raise ValueError(f"unknown adv_mode {mode}")
 
 
