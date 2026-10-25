@@ -40,3 +40,6 @@ tb_logs/
 .vscode/
 .idea/
 *.swp
+
+# Local-only comparison runs (not part of the submission)
+models/trained/*.zip
