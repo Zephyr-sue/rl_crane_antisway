@@ -1,14 +1,16 @@
 # RL-Based Anti-Sway Control of a Double-Pendulum Crane
 
+**Team:** Rupesh (B24CM1052)
+
 **GRPO for physical control.** A trolley must carry a hook and a payload (a double pendulum) to a target quickly while suppressing the coupled sway. The payload mass, cable lengths, initial sway and wind gusts are all randomized.
 
 We adapt **Group Relative Policy Optimization (GRPO)** ([DeepSeekMath, arXiv:2402.03300](https://arxiv.org/abs/2402.03300)) from LLM training to continuous control:
 - There is **no critic**.
 - **G rollouts replay the same randomized scenario** on a **GPU-batched simulator** and act as each other's baseline.
-- It is benchmarked against **PPO** and **SAC** (Stable-Baselines3).
-- For reference, it is also compared with classical **LQR** and **sliding-mode** controllers (the SMC follows [Qiang et al., Front. Robot. AI 2021](https://www.frontiersin.org/journals/robotics-and-ai/articles/10.3389/frobt.2021.639734/full)).
 
-![GRPO vs PPO vs SAC vs LQR on the same scenario](results/compare.gif)
+The comparison baseline is the **RBF neural-network adaptive controller** of [Qiang et al., Front. Robot. AI 2021](https://www.frontiersin.org/journals/robotics-and-ai/articles/10.3389/frobt.2021.639734/full): a computed-traction law on a nominal model, plus an online-adapted RBF compensator.
+
+![GRPO vs RBF adaptive control on the same scenario](results/compare.gif)
 
 <!--RESULTS-->
 
@@ -37,27 +39,24 @@ Trained agents are committed in [models/trained/](models/trained/).
 
 | Command | What it does |
 |---|---|
-| `uv run viz/live.py --agent grpo` | **Interactive real-time demo** (pygame). Keys `1`–`5` switch controller; click sets the target; `G` sends a gust; `+`/`-` change payload mass; `R` resets. |
-| `uv run viz/animate.py --compare` | Side-by-side GIF of GRPO, PPO, SAC and LQR, saved to `results/compare.gif` |
-| `uv run evaluate.py` | Full benchmark: 8 conditions × 100 episodes, plus a robustness heatmap. Writes the figures, CSVs and LaTeX table to `results/`. |
+| `uv run viz/live.py` | **Interactive real-time demo** (pygame). `1` = GRPO, `2` = RBF; click sets the target; `G` sends a gust; `+`/`-` change payload mass; `R` resets. |
+| `uv run viz/animate.py` | Side-by-side GIF of GRPO and RBF on the same scenario, saved to `results/compare.gif` |
+| `uv run evaluate.py` | Full benchmark: 8 conditions × 100 episodes, a robustness heatmap and GRPO ablations. Writes the figures, CSVs and LaTeX table to `results/`. |
 | `uv run viz/dashboard.py` | Interactive Plotly dashboard, saved to `results/report.html` |
-| `uv run pytest` | 18 tests: physics energy conservation, GPU/CPU simulator equivalence, env API, GRPO advantages, baselines |
+| `uv run pytest` | 17 tests: physics energy conservation, GPU/CPU simulator equivalence, env API, GRPO advantages, RBF controller |
 
 ## Training (reproduction)
 
 ```bash
-uv run train.py --algo grpo --iterations 250 --n-groups 64 --group-size 32 --seed 0   # GPU
-uv run train.py --algo ppo  --steps 5000000 --seed 0                                  # CPU, 16 envs
-uv run train.py --algo sac  --steps 500000  --seed 0                                  # GPU, 4 envs
+uv run train.py --iterations 250 --seed 0                              # main agent (~45 min on an RTX 3050 Ti)
+uv run train.py --iterations 120 --adv-mode outcome --tag outcome_     # ablation: paper's outcome supervision
+uv run train.py --iterations 120 --adv-mode process --tag process_     # ablation: paper's process supervision
+uv run train.py --iterations 120 --no-params --tag noparams_           # ablation: m2/L1/L2 hidden from the agent
 uv run tensorboard --logdir runs
 ```
-- Checkpoints go to `models/trained/<algo>_seed<s>.{pt,zip}`. The best checkpoint on the shared 64-scenario validation set is kept.
-- Learning curves go to `runs/<algo>_seed<s>/progress.csv`.
-- GRPO ablation flags:
-  - `--adv-mode outcome|process|rtg`
-  - `--beta 0.0` (no KL)
-  - `--no-params` (hide m2/L1/L2 from the agent)
-  - `--tag <name>_` (separate run names)
+- The main checkpoint goes to `models/trained/grpo_seed<s>.pt`, and ablation checkpoints to `models/trained/ablations/`. The best checkpoint on the shared 64-scenario validation set is kept.
+- Learning curves go to `runs/grpo_*/progress.csv`.
+- Other flags: `--n-groups`, `--group-size`, `--beta`, `--lr`, `--device cpu`.
 
 ## RL formulation
 
@@ -71,7 +70,7 @@ uv run tensorboard --logdir runs
 - cable lengths L1 ∈ [0.6, 1.4] m and L2 ∈ [0.4, 1.2] m
 - target ±[1, 4] m away
 - initial sway up to ±30°
-- up to 3 wind gusts of 2–6 N, each lasting 0.2–0.5 s
+- up to 3 wind gusts of 2–6 N, each lasting 0.2–0.5 s, during transport (the final 4 s are calm, so settling can be measured)
 
 Each episode lasts 12 s, and rail end-stops sit at ±6 m. During training a curriculum widens all ranges from 30% to 100%.
 
@@ -103,9 +102,9 @@ rl_crane_antisway/
 │   ├── reward.py             # shared reward (numpy & torch)
 │   └── observation.py        # shared observation builder
 ├── algos/grpo.py             # GRPO for continuous control
-├── baselines/                # LQR, sliding-mode, zero-force reference controllers
+├── baselines/rbf_adaptive.py # RBF NN adaptive controller (Qiang et al. 2021), the comparison baseline
 ├── models/                   # agent loader + trained checkpoints
-├── train.py / evaluate.py    # training and benchmarking entry points
+├── train.py / evaluate.py    # GRPO training and GRPO-vs-RBF benchmark
 ├── viz/                      # pygame live demo, GIF animation, Plotly dashboard
 ├── report/report.tex         # 2-page IEEE two-column report
 ├── results/                  # figures, metrics, tables
@@ -116,5 +115,3 @@ rl_crane_antisway/
 - Z. Shao et al., *DeepSeekMath*, arXiv:2402.03300, 2024. (GRPO)
 - H. Qiang et al., *Anti-Sway and Positioning Adaptive Control of a Double-Pendulum Effect Crane System With Neural Network Compensation*, Front. Robot. AI 8:639734, 2021.
 - J. Schulman et al., *Proximal Policy Optimization Algorithms*, 2017.
-- T. Haarnoja et al., *Soft Actor-Critic*, 2018.
-- A. Raffin et al., *Stable-Baselines3*, JMLR 2021.
