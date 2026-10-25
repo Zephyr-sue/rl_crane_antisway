@@ -10,7 +10,7 @@
 
 \title{Critic-Free Group-Relative Policy Optimization\\for Anti-Sway Control of a Double-Pendulum Crane}
 
-\author{\IEEEauthorblockN{TEAM MEMBER 1, TEAM MEMBER 2}
+\author{\IEEEauthorblockN{Rupesh (B24CM1052)}
 \IEEEauthorblockA{GitHub: \url{https://github.com/Zephyr-sue/rl_crane_antisway}}}
 
 \maketitle
@@ -27,7 +27,7 @@ We formulate anti-sway transport with an overhead crane, where a trolley carries
 \item payload $m_2\!\in\![0.5,4]$\,kg and cable lengths $L_1\!\in\![0.6,1.4]$\,m, $L_2\!\in\![0.4,1.2]$\,m;
 \item a target at a distance of $\pm[1,4]$\,m;
 \item initial sway up to $\pm30^\circ$;
-\item up to three gusts of 2--6\,N lasting 0.2--0.5\,s.
+\item up to three gusts of 2--6\,N lasting 0.2--0.5\,s, occurring during transport (the final 4\,s are calm).
 \end{itemize}
 The gust schedule is pre-sampled, so the scenario is exactly replayable. End-stops at $|x|=6$\,m stop the trolley. During training a curriculum widens all ranges from 30\% to 100\% over the first 30\% of training.
 
@@ -58,11 +58,16 @@ The linear $|e|$ term gives a constant pull toward the target, and together with
 \item \emph{process}~\cite{grpo}: the suffix sum of group-normalized rewards;
 \item \emph{rtg} (ours, default): the discounted return-to-go, normalized across the group \emph{at each timestep}, $\hat A_{i,t}=(G_{i,t}-\overline{G_{\cdot,t}})/\sigma_{G_{\cdot,t}}$. This is a per-time baseline suited to dense rewards.
 \end{itemize}
-Because all members of a group share the scenario, the baseline removes variance due to the plant and the disturbances. The loss is the GRPO objective (clipped ratio, $\epsilon=0.2$) with the unbiased KL estimator $\frac{\pi_{ref}}{\pi}-\log\frac{\pi_{ref}}{\pi}-1$ ($\beta=0.04$). The reference policy is refreshed every 10 iterations (iterative GRPO).
+Because all members of a group share the scenario, the baseline removes the variance caused by the plant and the disturbances, which is the job a learned critic would do in PPO. The loss is the GRPO objective (clipped ratio, $\epsilon=0.2$) with the unbiased KL estimator $\frac{\pi_{ref}}{\pi}-\log\frac{\pi_{ref}}{\pi}-1$ ($\beta=0.04$). The reference policy is refreshed every 10 iterations (iterative GRPO).
 
-\textbf{RL baselines.} PPO~\cite{ppo} (16 envs, GAE, reward normalization) and SAC~\cite{sac}, both from Stable-Baselines3, use the same environment, curriculum and validation set.
-
-\textbf{Classical references} (not learning; for context only). LQR is designed on the nominal linearization. The sliding-mode controller (SMC) uses a coupled surface, as in~\cite{qiang2021}.
+\textbf{Baseline: RBF adaptive control~\cite{qiang2021}.} This controller is not learned by RL; it serves as the comparison. Its control law is
+$\tau=M_0(q)(\ddot q_d-K_v\dot e-K_pe)+C_0\dot q+G_0-\hat f$,
+built on the nominal model ($m_2{=}2$, $L_1{=}1$, $L_2{=}0.8$) and following a quintic reference.
+\begin{itemize}
+\item \emph{RBF compensator:} $\hat f=W^\top h([e,\dot e])$ with 11 Gaussian units. The weights adapt online as $\dot W=\gamma\,h\,[e,\dot e]^\top PB$, where $PA+A^\top P=-I$.
+\item \emph{Underactuation:} only the trolley row of $\tau$ is actuated.
+\item \emph{Gains:} with the paper's positive sway gains the sway was not damped (12\% success). A grid search gave $K_p{=}\mathrm{diag}(5,-22,-22)$, $K_v{=}\mathrm{diag}(6,0.5,0.5)$, $\gamma{=}5$.
+\end{itemize}
 
 %RESULTS_SECTION%
 
@@ -71,8 +76,6 @@ Because all members of a group share the scenario, the baseline removes variance
 \bibitem{grpo} Z. Shao \emph{et al.}, ``DeepSeekMath: Pushing the limits of mathematical reasoning in open language models,'' arXiv:2402.03300, 2024.
 \bibitem{qiang2021} H. Qiang, Y. Sun, J. Lyu, D. Dong, ``Anti-sway and positioning adaptive control of a double-pendulum effect crane system with neural network compensation,'' \emph{Front. Robot. AI}, vol. 8, 639734, 2021.
 \bibitem{ppo} J. Schulman \emph{et al.}, ``Proximal policy optimization algorithms,'' arXiv:1707.06347, 2017.
-\bibitem{sac} T. Haarnoja \emph{et al.}, ``Soft actor-critic: Off-policy maximum entropy deep RL with a stochastic actor,'' ICML, 2018.
-\bibitem{sb3} A. Raffin \emph{et al.}, ``Stable-Baselines3: Reliable reinforcement learning implementations,'' JMLR, 22(268), 2021.
 \end{thebibliography}
 
 \end{document}

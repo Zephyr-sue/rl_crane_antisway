@@ -14,7 +14,7 @@ import pandas as pd  # noqa: E402
 import plotly.graph_objects as go  # noqa: E402
 from plotly.subplots import make_subplots  # noqa: E402
 
-from utils.plotting import COLORS, ORDER, VARIANT_COLORS, VARIANT_RUNS  # noqa: E402
+from utils.plotting import COLORS, ORDER, VARIANT_COLORS, VARIANT_RUNS, read_progress  # noqa: E402
 
 RESULTS = "results"
 LAYOUT = dict(template="plotly_white", font=dict(family="Inter, Segoe UI, sans-serif", size=13, color="#0b0b0b"),
@@ -25,7 +25,9 @@ def learning_curves():
     fig = make_subplots(rows=1, cols=2, subplot_titles=("Validation return", "Validation success rate"))
     for label, pattern in VARIANT_RUNS.items():
         for k, f in enumerate(sorted(glob.glob(os.path.join("runs", pattern, "progress.csv")))):
-            df = pd.read_csv(f).dropna(subset=["val_return"])
+            df = read_progress(f)
+            if len(df) < 2:
+                continue
             seed = os.path.basename(os.path.dirname(f)).split("seed")[-1]
             for col, metric in [(1, "val_return"), (2, "val_success")]:
                 fig.add_trace(go.Scatter(x=df.env_steps, y=df[metric], name=f"GRPO {label} (seed {seed})",

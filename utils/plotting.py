@@ -35,13 +35,21 @@ def setup_style():
     })
 
 
+def read_progress(path: str) -> pd.DataFrame:
+    """Validation rows of a run's progress.csv (empty for a run that has not logged yet)."""
+    try:
+        return pd.read_csv(path).dropna(subset=["val_return"])
+    except (pd.errors.EmptyDataError, KeyError):
+        return pd.DataFrame()
+
+
 def plot_learning_curves(runs_dir: str, out_path: str):
     """GRPO validation return and success vs env steps for the main run and each ablation (mean +/- std over seeds)."""
     setup_style()
     fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.3))
     for label, pattern in VARIANT_RUNS.items():
         curves = [df for f in sorted(glob.glob(os.path.join(runs_dir, pattern, "progress.csv")))
-                  if len(df := pd.read_csv(f).dropna(subset=["val_return"]))]
+                  if len(df := read_progress(f)) > 1]
         if not curves:
             continue
         for ax, metric in [(axes[0], "val_return"), (axes[1], "val_success")]:
@@ -117,8 +125,8 @@ def plot_heatmaps(grids: dict, m2_vals, l_vals, out_path: str, train_box=None):
         if train_box is not None:
             (l0, l1), (m0, m1) = train_box
             ax.add_patch(plt.Rectangle((l0, m0), l1 - l0, m1 - m0, fill=False, edgecolor=INK, linestyle="--", linewidth=1.0))
-        ax.set_title(f"{name}: success rate")
-        ax.set_xlabel(r"Total cable length $L_1+L_2$ (m)")
+        ax.set_title(name)
+        ax.set_xlabel(r"Cable length $L_1+L_2$ (m)")
         ax.grid(False)
     axes[0].set_ylabel(r"Payload mass $m_2$ (kg)")
     fig.colorbar(im, ax=axes, shrink=0.9, label="Success rate")
