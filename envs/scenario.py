@@ -18,6 +18,7 @@ MAX_INIT_RATE = 0.3
 GUST_FORCE_RANGE = (2.0, 6.0)
 GUST_DURATION_RANGE = (0.2, 0.5)
 MAX_GUSTS = 3
+CALM_TAIL = 4.0  # s; gusts hit during transport, the final seconds are calm so settling is measurable
 
 
 @dataclass
@@ -38,13 +39,14 @@ def _lerp_range(lo: float, hi: float, nominal: float, level: float):
 
 
 def sample_gusts(rng: np.random.Generator, max_steps: int, dt: float, level: float = 1.0) -> np.ndarray:
-    """Piecewise-constant gust profile with up to MAX_GUSTS gusts of random sign."""
+    """Piecewise-constant gust profile: up to MAX_GUSTS gusts of random sign, none in the calm tail."""
     gusts = np.zeros(max_steps, dtype=np.float64)
-    if max_steps <= int(1.0 / dt):
+    first, last = int(1.0 / dt), max_steps - int(CALM_TAIL / dt)
+    if last <= first:
         return gusts
     n_gusts = int(rng.integers(0, MAX_GUSTS + 1))
     for _ in range(n_gusts):
-        start = int(rng.integers(int(1.0 / dt), max_steps))
+        start = int(rng.integers(first, last))
         duration = int(rng.uniform(*GUST_DURATION_RANGE) / dt)
         magnitude = level * rng.uniform(*GUST_FORCE_RANGE) * rng.choice([-1.0, 1.0])
         gusts[start:start + duration] += magnitude
