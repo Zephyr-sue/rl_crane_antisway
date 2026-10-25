@@ -12,16 +12,16 @@ import pandas as pd  # noqa: E402
 # Categorical slots in fixed order (validated reference palette); colour follows the controller
 COLORS = {
     "GRPO": "#2a78d6",
-    "PPO": "#eb6834",
-    "SAC": "#1baf7a",
-    "LQR": "#eda100",
-    "SMC": "#e87ba4",
-    "Zero": "#8a8984",
+    "RBF": "#eb6834",
 }
+# GRPO variants in the learning-curve figure (slot 1 = main run; RBF keeps slot 2)
+VARIANT_COLORS = {"rtg (main)": "#2a78d6", "outcome": "#1baf7a", "process": "#eda100", "no params": "#e87ba4"}
+VARIANT_RUNS = {"rtg (main)": "grpo_seed*", "outcome": "grpo_outcome_seed*", "process": "grpo_process_seed*",
+                "no params": "grpo_noparams_seed*"}
 INK = "#0b0b0b"
 INK_2 = "#52514e"
 GRID = "#e4e3df"
-ORDER = ["GRPO", "PPO", "SAC", "LQR", "SMC", "Zero"]
+ORDER = ["GRPO", "RBF"]
 
 
 def setup_style():
@@ -35,37 +35,29 @@ def setup_style():
     })
 
 
-def plot_learning_curves(runs_dir: str, out_path: str, x: str = "env_steps"):
-    """Validation return vs env steps (or wall time), mean +/- std over seeds, one panel per algo."""
+def plot_learning_curves(runs_dir: str, out_path: str):
+    """GRPO validation return and success vs env steps for the main run and each ablation (mean +/- std over seeds)."""
     setup_style()
-    algos = [("grpo", "GRPO"), ("ppo", "PPO"), ("sac", "SAC")]
-    fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.4))
-    for algo, label in algos:
-        files = sorted(glob.glob(os.path.join(runs_dir, f"{algo}_seed*", "progress.csv")))
-        curves = []
-        for f in files:
-            df = pd.read_csv(f).dropna(subset=["val_return"])
-            if len(df):
-                curves.append(df)
+    fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.3))
+    for label, pattern in VARIANT_RUNS.items():
+        curves = [df for f in sorted(glob.glob(os.path.join(runs_dir, pattern, "progress.csv")))
+                  if len(df := pd.read_csv(f).dropna(subset=["val_return"]))]
         if not curves:
             continue
-        for ax, xcol, metric in [(axes[0], x, "val_return"), (axes[1], x, "val_success")]:
-            grid = np.linspace(0, min(c[xcol].max() for c in curves), 100)
-            ys = np.stack([np.interp(grid, c[xcol], c[metric]) for c in curves])
-            scale = 1e6 if xcol == "env_steps" else 60.0
-            m, s = ys.mean(0), ys.std(0)
-            ax.plot(grid / scale, m, color=COLORS[label], label=f"{label} ({len(curves)} seed{'s' if len(curves) > 1 else ''})")
+        for ax, metric in [(axes[0], "val_return"), (axes[1], "val_success")]:
+            grid = np.linspace(0, min(c["env_steps"].max() for c in curves), 100)
+            ys = np.stack([np.interp(grid, c["env_steps"], c[metric]) for c in curves])
+            m, sd = ys.mean(0), ys.std(0)
+            seeds = f" ({len(curves)} seeds)" if len(curves) > 1 else ""
+            ax.plot(grid / 1e6, m, color=VARIANT_COLORS[label], label=label + seeds)
             if len(curves) > 1:
-                ax.fill_between(grid / scale, m - s, m + s, color=COLORS[label], alpha=0.2, linewidth=0)
-    xlabel = "Environment steps (millions, log scale)" if x == "env_steps" else "Wall-clock time (min)"
+                ax.fill_between(grid / 1e6, m - sd, m + sd, color=VARIANT_COLORS[label], alpha=0.2, linewidth=0)
     for ax, ylabel in [(axes[0], "Validation return"), (axes[1], "Validation success rate")]:
-        ax.set_xlabel(xlabel)
+        ax.set_xlabel("Environment steps (millions)")
         ax.set_ylabel(ylabel)
-        if x == "env_steps":
-            ax.set_xscale("log")
-    axes[0].set_ylim(bottom=max(axes[0].get_ylim()[0], -2500))
+    axes[0].set_ylim(bottom=max(axes[0].get_ylim()[0], -1500))
     axes[1].set_ylim(-0.02, 1.02)
-    axes[1].legend(loc="upper left")
+    axes[1].legend(loc="lower right")
     fig.tight_layout()
     fig.savefig(out_path)
     plt.close(fig)

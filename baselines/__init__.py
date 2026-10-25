@@ -1,4 +1,4 @@
-"""Classical (non-learning) reference controllers, used only as comparison baselines."""
+"""Model-based reference controller (RBF adaptive control, Qiang et al. 2021) used as the baseline."""
 import numpy as np
 
 from envs.observation import POS_SCALE, VEL_SCALE, RATE_SCALE
@@ -16,15 +16,6 @@ def state_from_obs(obs: np.ndarray) -> np.ndarray:
     ])
 
 
-class ZeroController:
-    """Applies no force (lower bound)."""
-    name = "Zero"
+from baselines.rbf_adaptive import RBFAdaptiveController  # noqa: E402
 
-    def act(self, obs: np.ndarray) -> np.ndarray:
-        return np.zeros(1, dtype=np.float32)
-
-
-from baselines.lqr import LQRController  # noqa: E402
-from baselines.sliding_mode import SlidingModeController  # noqa: E402
-
-__all__ = ["state_from_obs", "ZeroController", "LQRController", "SlidingModeController"]
+__all__ = ["state_from_obs", "RBFAdaptiveController"]

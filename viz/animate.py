@@ -1,8 +1,8 @@
 """Animated crane GIF/MP4 (matplotlib): one controller, or several side by side on the same scenario.
 
-    uv run viz/animate.py --compare                       # GRPO vs PPO vs SAC vs LQR -> results/compare.gif
+    uv run viz/animate.py                                 # GRPO vs RBF -> results/compare.gif
     uv run viz/animate.py --controllers GRPO --out results/grpo.gif
-    uv run viz/animate.py --compare --condition "Strong gusts" --index 2
+    uv run viz/animate.py --condition "Strong gusts" --index 2
 """
 import argparse
 import os
@@ -18,7 +18,7 @@ import numpy as np  # noqa: E402
 from matplotlib.animation import FuncAnimation, PillowWriter, FFMpegWriter  # noqa: E402
 
 from envs.double_pendulum_crane_env import DoublePendulumCraneEnv  # noqa: E402
-from evaluate import CONDITIONS, available_controllers, make_controller, make_scenarios  # noqa: E402
+from evaluate import CONDITIONS, CONTROLLERS, make_controller, make_scenarios  # noqa: E402
 from utils.evaluation import rollout  # noqa: E402
 from utils.plotting import COLORS, GRID, INK, INK_2, setup_style  # noqa: E402
 
@@ -27,7 +27,7 @@ def animate(trajs: dict, out_path: str, stride: int = 3, fps: int = 17, title: s
     setup_style()
     names = list(trajs)
     n = len(names)
-    cols = min(n, 2)
+    cols = min(n, 2)  # GRPO and RBF side by side
     rows = int(np.ceil(n / cols))
     fig = plt.figure(figsize=(4.2 * cols, 2.3 * rows + 2.2))
     gs = fig.add_gridspec(rows + 1, cols, height_ratios=[1] * rows + [0.9])
@@ -49,7 +49,7 @@ def animate(trajs: dict, out_path: str, stride: int = 3, fps: int = 17, title: s
         ax.grid(False)
         ax.set_yticks([])
         ax.axhline(0, color=INK_2, linewidth=2)
-        ax.axvline(target, color=COLORS["SAC"] if name != "SAC" else INK_2, linestyle="--", linewidth=1)
+        ax.axvline(target, color=INK_2, linestyle="--", linewidth=1)
         ax.set_title(name, color=INK, fontweight="bold")
         trolley, = ax.plot([], [], "s", color=COLORS.get(name, INK_2), markersize=12)
         cables, = ax.plot([], [], "-", color=INK_2, linewidth=1.2)
@@ -117,7 +117,6 @@ def _gust_intervals(tr):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--compare", action="store_true", help="GRPO, PPO, SAC and LQR side by side")
     p.add_argument("--controllers", nargs="+", default=None)
     p.add_argument("--condition", default="Random", choices=list(CONDITIONS))
     p.add_argument("--index", type=int, default=3, help="scenario index within the condition's test set")
@@ -125,12 +124,7 @@ def main():
     p.add_argument("--stride", type=int, default=3)
     args = p.parse_args()
 
-    if args.controllers:
-        names = [c.upper() for c in args.controllers]
-    else:
-        names = [c for c in available_controllers() if c in ("GRPO", "PPO", "SAC", "LQR")]
-        if not args.compare:
-            names = names[:1]
+    names = [c.upper() for c in args.controllers] if args.controllers else CONTROLLERS
     out = args.out or os.path.join("results", "compare.gif" if len(names) > 1 else f"{names[0].lower()}.gif")
 
     sc = make_scenarios(args.condition, args.index + 1)[args.index]

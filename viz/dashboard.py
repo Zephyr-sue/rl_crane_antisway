@@ -14,7 +14,7 @@ import pandas as pd  # noqa: E402
 import plotly.graph_objects as go  # noqa: E402
 from plotly.subplots import make_subplots  # noqa: E402
 
-from utils.plotting import COLORS, ORDER  # noqa: E402
+from utils.plotting import COLORS, ORDER, VARIANT_COLORS, VARIANT_RUNS  # noqa: E402
 
 RESULTS = "results"
 LAYOUT = dict(template="plotly_white", font=dict(family="Inter, Segoe UI, sans-serif", size=13, color="#0b0b0b"),
@@ -23,17 +23,17 @@ LAYOUT = dict(template="plotly_white", font=dict(family="Inter, Segoe UI, sans-s
 
 def learning_curves():
     fig = make_subplots(rows=1, cols=2, subplot_titles=("Validation return", "Validation success rate"))
-    for algo, label in [("grpo", "GRPO"), ("ppo", "PPO"), ("sac", "SAC")]:
-        for k, f in enumerate(sorted(glob.glob(os.path.join("runs", f"{algo}_seed*", "progress.csv")))):
+    for label, pattern in VARIANT_RUNS.items():
+        for k, f in enumerate(sorted(glob.glob(os.path.join("runs", pattern, "progress.csv")))):
             df = pd.read_csv(f).dropna(subset=["val_return"])
-            seed = os.path.basename(os.path.dirname(f))
+            seed = os.path.basename(os.path.dirname(f)).split("seed")[-1]
             for col, metric in [(1, "val_return"), (2, "val_success")]:
-                fig.add_trace(go.Scatter(x=df.env_steps, y=df[metric], name=f"{label} ({seed})", legendgroup=label,
-                                         showlegend=(col == 1), line=dict(color=COLORS[label], width=2),
-                                         opacity=1.0 if k == 0 else 0.55,
-                                         hovertemplate="%{y:.2f}"), row=1, col=col)
-    fig.update_xaxes(type="log", title_text="Environment steps")
-    fig.update_layout(**LAYOUT, title="Learning curves (shared validation set, 64 scenarios)")
+                fig.add_trace(go.Scatter(x=df.env_steps, y=df[metric], name=f"GRPO {label} (seed {seed})",
+                                         legendgroup=label, showlegend=(col == 1),
+                                         line=dict(color=VARIANT_COLORS[label], width=2),
+                                         opacity=1.0 if k == 0 else 0.55, hovertemplate="%{y:.2f}"), row=1, col=col)
+    fig.update_xaxes(title_text="Environment steps")
+    fig.update_layout(**LAYOUT, title="GRPO learning curves: main run and ablations (shared 64-scenario validation set)")
     return fig
 
 
@@ -82,6 +82,11 @@ def main():
     overall = summary.groupby("controller").mean(numeric_only=True)
     overall = overall.reindex([c for c in ORDER if c in overall.index]).round(2)
 
+    ablation_html = ""
+    if os.path.exists(os.path.join(RESULTS, "ablations.csv")):
+        ablation_html = ("<section><h2>GRPO ablations (random scenarios)</h2>"
+                         + pd.read_csv(os.path.join(RESULTS, "ablations.csv")).round(2).to_html(index=False, border=0)
+                         + "</section>")
     figs = [learning_curves(),
             condition_bars(summary, "success", "Success rate by test condition"),
             condition_bars(summary, "settle_time", "Settling time (s) by test condition (lower is better)"),
@@ -102,9 +107,10 @@ table {{ border-collapse:collapse; font-size:14px }} th, td {{ padding:6px 12px;
 th:first-child, td:first-child {{ text-align:left }}
 </style></head><body>
 <h1>RL anti-sway control of a double-pendulum crane</h1>
-<p class="sub">GRPO (critic-free, group-relative) vs PPO vs SAC, with LQR and sliding-mode reference baselines.</p>
+<p class="sub">GRPO (critic-free, group-relative policy optimization) vs the RBF neural-network adaptive controller of Qiang et al. (2021).</p>
 <section><h2>Side-by-side rollout</h2>{gif_tag("compare.gif")}</section>
 <section><h2>Overall (mean over all test conditions)</h2>{overall.to_html(classes="t", border=0)}</section>
+{ablation_html}
 {''.join(f'<section>{p}</section>' for p in parts)}
 </body></html>"""
     out = os.path.join(RESULTS, "report.html")

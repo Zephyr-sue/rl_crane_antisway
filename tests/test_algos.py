@@ -4,7 +4,8 @@ import pytest
 import torch
 
 from algos.grpo import GRPO, GRPOConfig, group_advantages
-from baselines import LQRController, SlidingModeController, ZeroController, state_from_obs
+from baselines import RBFAdaptiveController, state_from_obs
+from baselines.rbf_adaptive import quintic
 from envs.double_pendulum_crane_env import DoublePendulumCraneEnv
 from envs.scenario import sample_scenario
 from utils.evaluation import episode_metrics, rollout
@@ -56,15 +57,24 @@ def test_state_from_obs_roundtrip():
     np.testing.assert_allclose(s, [x - env.target_x, x_dot, th1, th1_dot, th2, th2_dot], atol=1e-5)
 
 
-@pytest.mark.parametrize("ctrl", [LQRController(), SlidingModeController(), ZeroController()])
-def test_baselines_run(ctrl):
+def test_quintic_reference_boundary_conditions():
+    assert quintic(0.0) == (0.0, 0.0, 0.0)
+    p, dp, ddp = quintic(1.0)
+    assert p == pytest.approx(1.0) and dp == pytest.approx(0.0, abs=1e-12) and ddp == pytest.approx(0.0, abs=1e-12)
+
+
+def test_rbf_controller_runs_and_resets():
+    ctrl = RBFAdaptiveController()
     env = DoublePendulumCraneEnv()
     m = episode_metrics(rollout(env, ctrl, sample_scenario(np.random.default_rng(1))))
     assert set(m) >= {"success", "settle_time", "max_sway_deg"}
+    assert np.abs(ctrl.W).sum() > 0          # online adaptation changed the RBF weights
+    ctrl.reset()
+    assert np.abs(ctrl.W).sum() == 0 and ctrl.e0 is None
 
 
-def test_lqr_settles_nominal_without_gusts():
+def test_rbf_positions_nominal_crane_without_gusts():
     sc = sample_scenario(np.random.default_rng(0), randomize_params=False, level=0.3)
     sc.gusts[:] = 0
-    m = episode_metrics(rollout(DoublePendulumCraneEnv(), LQRController(), sc))
-    assert m["success"] == 1.0
+    m = episode_metrics(rollout(DoublePendulumCraneEnv(), RBFAdaptiveController(), sc))
+    assert m["final_error_cm"] < 10.0

@@ -3,7 +3,7 @@
     uv run viz/live.py [--agent grpo]
 
 Keys:
-    1 GRPO   2 PPO   3 SAC   4 LQR   5 SMC   (switch controller live)
+    1 GRPO   2 RBF adaptive baseline   (switch controller live)
     mouse click    set a new target position
     G              wind gust on the payload (hold for longer)
     + / -          change payload mass mid-run
@@ -19,10 +19,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np  # noqa: E402
 
 from envs.double_pendulum_crane_env import DoublePendulumCraneEnv  # noqa: E402
-from evaluate import make_controller, available_controllers  # noqa: E402
+from evaluate import CONTROLLERS, make_controller  # noqa: E402
 from viz.renderer import CraneRenderer, SCALE, WIDTH  # noqa: E402
 
-KEYMAP = {"1": "GRPO", "2": "PPO", "3": "SAC", "4": "LQR", "5": "SMC"}
+KEYMAP = {"1": "GRPO", "2": "RBF"}
 
 
 def main():
@@ -31,13 +31,18 @@ def main():
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args()
 
-    available = available_controllers()
+    available = CONTROLLERS
     cache = {}
 
     def get(name):
         if name not in cache:
             cache[name] = make_controller(name)
         return cache[name]
+
+    def restart(name):
+        """Stateful controllers (RBF reference trajectory, adaptive weights) re-plan from the current state."""
+        if hasattr(get(name), "reset"):
+            get(name).reset()
 
     name = args.agent.upper() if args.agent.upper() in available else available[0]
     env = DoublePendulumCraneEnv()  # truncation flag is ignored: the demo runs until quit
@@ -59,8 +64,10 @@ def main():
                     running = False
                 elif key in KEYMAP and KEYMAP[key] in available:
                     name = KEYMAP[key]
+                    restart(name)
                 elif key == "r":
                     obs, _ = env.reset(seed=int(rng.integers(1 << 30)))
+                    restart(name)
                     settled_since = None
                 elif key in ("+", "="):
                     env.dynamics.m2 = env.scenario.m2 = min(6.0, env.dynamics.m2 + 0.5)
@@ -68,6 +75,7 @@ def main():
                     env.dynamics.m2 = env.scenario.m2 = max(0.5, env.dynamics.m2 - 0.5)
             elif event.type == pg.MOUSEBUTTONDOWN:
                 env.scenario.target_x = float(np.clip((event.pos[0] - WIDTH / 2) / SCALE, -5.5, 5.5))
+                restart(name)
                 settled_since = None
         if pg.key.get_pressed()[pg.K_g]:
             manual_gust = 6.0
@@ -88,7 +96,7 @@ def main():
         renderer.draw(env.state, env.dynamics, env.target_x, info["force"] / env.max_force, info["gust"],
                       env.current_step * env.dt,
                       hud_lines=[f"controller: {name}   [{status}]",
-                                 "1-5 ctrl  click target  G gust  +/- mass  R reset"],
+                                 "1/2 ctrl  click target  G gust  +/- mass  R reset"],
                       title=f"Controller: {name}")
     renderer.close()
 
