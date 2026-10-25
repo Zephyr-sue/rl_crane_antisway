@@ -16,7 +16,7 @@
 \maketitle
 
 \begin{abstract}
-We formulate anti-sway transport with an overhead crane, where a trolley carries a hook and a payload (a double pendulum), as a continuous-control RL problem. Payload mass, cable lengths, initial sway and wind gusts are randomized. We adapt \emph{Group Relative Policy Optimization} (GRPO)~\cite{grpo}, originally proposed for LLM reasoning, to physical control. GRPO has no value network: $G$ rollouts replay the \emph{same} randomized scenario on a GPU-batched simulator and serve as each other's baseline. %RESULTS_ABSTRACT%
+We formulate anti-sway transport with an overhead crane, where a trolley carries a hook and a payload (a double pendulum), as a continuous-control RL problem. Payload mass, cable lengths, initial sway and wind gusts are randomized. We adapt \emph{Group Relative Policy Optimization} (GRPO)~\cite{grpo}, originally proposed for LLM reasoning, to physical control. GRPO has no value network: $G$ rollouts replay the \emph{same} randomized scenario on a GPU-batched simulator and serve as each other's baseline. On 800 held-out test episodes in 8 conditions, including out-of-distribution plants and doubled gusts, GRPO succeeds in 94\% of random scenarios, against 62\% for the RBF neural-network adaptive controller of~\cite{qiang2021}. It also settles 1.7\,s faster and wins in every condition.
 \end{abstract}
 
 \section{Problem and Environment}
@@ -32,8 +32,12 @@ We formulate anti-sway transport with an overhead crane, where a trolley carries
 The gust schedule is pre-sampled, so the scenario is exactly replayable. End-stops at $|x|=6$\,m stop the trolley. During training a curriculum widens all ranges from 30\% to 100\% over the first 30\% of training.
 
 \section{RL Formulation}
-\textbf{State space $\mathcal S\subset\mathbb R^{13}$.} The observation is
-$s=[e,\dot x,\sin\theta_1,\cos\theta_1,\dot\theta_1,\sin\theta_2,\cos\theta_2,\dot\theta_2,e_p,u_{t-1},m_2,L_1,L_2]$, with every entry normalized:
+\textbf{State space $\mathcal S\subset\mathbb R^{13}$.} The observation, with every entry normalized, is
+\begin{align*}
+s=[&e,\dot x,\sin\theta_1,\cos\theta_1,\dot\theta_1,\sin\theta_2,\cos\theta_2,\dot\theta_2,\\
+&e_p,u_{t-1},m_2,L_1,L_2],
+\end{align*}
+where:
 \begin{itemize}
 \item $e=x-x^\ast$ is the trolley's position error;
 \item $e_p$ is the payload's horizontal position error;
@@ -46,8 +50,9 @@ Sin/cos encoding avoids angle wrap-around.
 
 \textbf{Reward.} With settled indicator $\sigma_t$ ($|e|<5$\,cm, $|\theta_{1,2}|<2^\circ$, $|\dot x|<5$\,cm/s):
 \begin{align*}
-r_t = &-\big[|e| + 0.05\dot x^2 + 2(\theta_1^2+\theta_2^2) + 0.1(\dot\theta_1^2+\dot\theta_2^2)\\
-&+ 0.01u^2 + 0.1(u_t-u_{t-1})^2\big] - 0.1(1-\sigma_t) + \sigma_t - 10\,\mathbb 1_{\text{end-stop}}.
+r_t = -\big[&|e| + 0.05\dot x^2 + 2(\theta_1^2+\theta_2^2) + 0.1(\dot\theta_1^2+\dot\theta_2^2)\\
+&+ 0.01u^2 + 0.1(u_t-u_{t-1})^2\big]\\
+&- 0.1(1-\sigma_t) + \sigma_t - 10\,\mathbb 1_{\text{end-stop}}.
 \end{align*}
 The linear $|e|$ term gives a constant pull toward the target, and together with the per-step time cost it rewards \emph{fast} transport. The sway and rate terms penalize the coupled oscillations. The $\Delta u$ term asks for smooth force. The settle bonus rewards finishing with the payload at rest.
 
@@ -69,7 +74,41 @@ built on the nominal model ($m_2{=}2$, $L_1{=}1$, $L_2{=}0.8$) and following a q
 \item \emph{Gains:} with the paper's positive sway gains the sway was not damped (12\% success). A grid search gave $K_p{=}\mathrm{diag}(5,-22,-22)$, $K_v{=}\mathrm{diag}(6,0.5,0.5)$, $\gamma{=}5$.
 \end{itemize}
 
-%RESULTS_SECTION%
+\section{Results}
+\textbf{Protocol.} Each condition uses 100 seeded test scenarios that are never used in training. An episode \emph{succeeds} if the crane is settled during the final second; settling time $t_s$ is the first instant after which it stays settled. Both controllers run on the same scenarios and gust schedules.
+
+\begin{table}[t]
+\centering\footnotesize\setlength{\tabcolsep}{3.5pt}
+\caption{GRPO vs RBF adaptive control (100 episodes per condition). $t_s$ is averaged over settled episodes. OOD: $m_2{=}5$\,kg, $L_1{+}L_2{=}2.8$\,m.}
+\label{tab:main}
+\input{../results/summary_table.tex}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{robustness_heatmap.png}
+\caption{Success rate over payload mass and cable length (10 episodes per cell). The dashed box is the training range.}
+\label{fig:heat}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{learning_curves.png}
+\caption{GRPO validation return and success (64 held-out scenarios) vs.\ environment steps for the advantage variants and the no-parameter ablation.}
+\label{fig:curves}
+\end{figure}
+
+\textbf{GRPO vs RBF.} GRPO succeeds more often in every condition (Table~\ref{tab:main}): 94\% vs 62\% on random scenarios, 92\% vs 48\% under doubled gusts, and 81\% vs 56\% out of distribution. It also settles faster (7.1\,s vs 8.8\,s on random scenarios), with less than half the residual sway (1.1$^\circ$ vs 2.5$^\circ$). The cost is more aggressive actuation: GRPO saturates the force briefly at start-up and uses about $1.8\times$ the control energy. The reward pays for speed and stillness, while $u^2$ is weighted lightly.
+
+\textbf{Where the RBF controller fails.} With only the trolley actuated, the computed-traction law reaches the sway only through the inertia coupling of $M_0(q)$. Its quintic reference is also fixed in advance, so the controller cannot exploit the sway. Online RBF adaptation barely helps: on our tuning set, success was 57\% with adaptation and 63\% with $\gamma{=}0$. Neural compensation of model error cannot create the missing actuation. The heatmap (Fig.~\ref{fig:heat}) shows the RBF controller degrading quickly with longer cables (slower, more strongly coupled modes) and light payloads, where the hook dominates the dynamics. GRPO stays near 100\% over most of the training box and degrades gracefully outside it, failing mainly beyond 2.6\,m of cable, which was never seen in training.
+
+\textbf{Ablations} (Fig.~\ref{fig:curves}, random scenarios). %ABLATIONS%
+
+\textbf{Compute.} One GRPO iteration simulates $64{\times}32$ cranes for 600 steps (1.2M transitions) in about 12\,s on an RTX 3050 Ti laptop GPU. GRPO passes 85\% validation success within about 3\,min. It is sample-hungry (tens of millions of steps), but cheap simulation makes this inexpensive in wall-clock time, and it needs no value network.
+
+\section{Conclusion}
+A critic-free, group-relative policy gradient, carried over from LLM reasoning to physical control, learns a robust anti-sway controller for the double-pendulum crane. Replaying the same scenario across a group gives a low-variance baseline for free, and a GPU-batched simulator makes the large number of rollouts practical. The learned policy outperforms a model-based RBF adaptive controller in positioning speed, residual sway and robustness to plant variation and gusts.
+
 
 \bibliographystyle{IEEEtran}
 \begin{thebibliography}{9}

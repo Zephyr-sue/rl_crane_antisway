@@ -46,7 +46,7 @@ def read_progress(path: str) -> pd.DataFrame:
 def plot_learning_curves(runs_dir: str, out_path: str):
     """GRPO validation return and success vs env steps for the main run and each ablation (mean +/- std over seeds)."""
     setup_style()
-    fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.3))
+    fig, axes = plt.subplots(1, 2, figsize=(3.6, 1.9))
     for label, pattern in VARIANT_RUNS.items():
         curves = [df for f in sorted(glob.glob(os.path.join(runs_dir, pattern, "progress.csv")))
                   if len(df := read_progress(f)) > 1]
@@ -60,12 +60,13 @@ def plot_learning_curves(runs_dir: str, out_path: str):
             ax.plot(grid / 1e6, m, color=VARIANT_COLORS[label], label=label + seeds)
             if len(curves) > 1:
                 ax.fill_between(grid / 1e6, m - sd, m + sd, color=VARIANT_COLORS[label], alpha=0.2, linewidth=0)
-    for ax, ylabel in [(axes[0], "Validation return"), (axes[1], "Validation success rate")]:
-        ax.set_xlabel("Environment steps (millions)")
-        ax.set_ylabel(ylabel)
-    axes[0].set_ylim(bottom=max(axes[0].get_ylim()[0], -1500))
-    axes[1].set_ylim(-0.02, 1.02)
-    axes[1].legend(loc="lower right")
+    for ax, ylabel in [(axes[0], "Validation return"), (axes[1], "Validation success")]:
+        ax.set_xlabel("Env. steps (M)", fontsize=7)
+        ax.set_ylabel(ylabel, fontsize=7)
+        ax.tick_params(labelsize=6)
+    axes[0].set_ylim(-300, max(50, axes[0].get_ylim()[1]))
+    axes[1].set_ylim(0.6, 1.0)
+    axes[1].legend(loc="lower right", fontsize=5.5)
     fig.tight_layout()
     fig.savefig(out_path)
     plt.close(fig)
