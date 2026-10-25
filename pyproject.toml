@@ -8,7 +8,6 @@ dependencies = [
     "numpy>=1.26",
     "scipy>=1.11",
     "gymnasium>=0.29",
-    "stable-baselines3>=2.3",
     "torch>=2.5",
     "matplotlib>=3.8",
     "pillow>=10.0",
@@ -16,10 +15,9 @@ dependencies = [
     "tensorboard>=2.15",
     "tqdm>=4.66",
     "rich>=13.0",
+    "pygame>=2.5",
+    "plotly>=5.18",
 ]
-
-[project.optional-dependencies]
-viz = ["pygame>=2.5", "plotly>=5.18"]
 
 [dependency-groups]
 dev = [

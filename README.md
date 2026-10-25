@@ -22,7 +22,7 @@ Requires Python 3.12. An NVIDIA GPU is optional; everything also runs on CPU.
 ```bash
 git clone https://github.com/Zephyr-sue/rl_crane_antisway.git
 cd rl_crane_antisway
-uv sync --extra viz
+uv sync
 uv run python -c "import torch; print(torch.cuda.is_available())"
 ```
 
