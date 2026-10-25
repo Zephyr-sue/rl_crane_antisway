@@ -45,80 +45,46 @@ class CraneDynamics:
         self.b_theta1 = b_theta1
         self.b_theta2 = b_theta2
 
-    def compute_derivatives(self, state: np.ndarray, force: float, disturbance_force: float = 0.0) -> np.ndarray:
-        """Calculates state derivative [x_dot, x_ddot, theta1_dot, theta1_ddot, theta2_dot, theta2_ddot].
-        
-        Solves: M_mat(q) * q_ddot = F_vec(q, q_dot)
-        """
-        x, x_dot, th1, th1_dot, th2, th2_dot = state
-        M, m1, m2 = self.M, self.m1, self.m2
-        L1, L2, g = self.L1, self.L2, self.g
-
-        # Trigonometric terms
-        s1, c1 = np.sin(th1), np.cos(th1)
-        s2, c2 = np.sin(th2), np.cos(th2)
-        s12, c12 = np.sin(th1 - th2), np.cos(th1 - th2)
-
-        # Symmetric Inertia Matrix M_mat(q)
-        M11 = M + m1 + m2
+    def mass_matrix(self, state: np.ndarray) -> np.ndarray:
+        """Symmetric inertia matrix M(q)."""
+        th1, th2 = state[2], state[4]
+        m1, m2, L1, L2 = self.m1, self.m2, self.L1, self.L2
+        c1, c2, c12 = np.cos(th1), np.cos(th2), np.cos(th1 - th2)
         M12 = (m1 + m2) * L1 * c1
         M13 = m2 * L2 * c2
-
-        M21 = M12
-        M22 = (m1 + m2) * (L1 ** 2)
         M23 = m2 * L1 * L2 * c12
-
-        M31 = M13
-        M32 = M23
-        M33 = m2 * (L2 ** 2)
-
-        M_mat = np.array([
-            [M11, M12, M13],
-            [M21, M22, M23],
-            [M31, M32, M33]
-        ], dtype=np.float64)
-
-        # Right-hand side vector (Forces, Coriolis, Gravity, Damping, Disturbances)
-        # A horizontal disturbance F_d acting on the payload maps to generalized
-        # forces via J^T F with payload x-position x + L1*sin(th1) + L2*sin(th2).
-        # 1. Trolley row
-        f_x = (
-            force
-            + disturbance_force
-            - self.b_x * x_dot
-            + (m1 + m2) * L1 * (th1_dot ** 2) * s1
-            + m2 * L2 * (th2_dot ** 2) * s2
-        )
-
-        # 2. Hook angle row
-        f_th1 = (
-            -(m1 + m2) * g * L1 * s1
-            - m2 * L1 * L2 * (th2_dot ** 2) * s12
-            - self.b_theta1 * th1_dot
-            + disturbance_force * L1 * c1
-        )
-
-        # 3. Payload angle row (wind/external disturbance acts on payload)
-        f_th2 = (
-            -m2 * g * L2 * s2
-            + m2 * L1 * L2 * (th1_dot ** 2) * s12
-            - self.b_theta2 * th2_dot
-            + disturbance_force * L2 * c2
-        )
-
-        rhs = np.array([f_x, f_th1, f_th2], dtype=np.float64)
-
-        # Acceleration: q_ddot = inv(M_mat) * rhs
-        q_ddot = np.linalg.solve(M_mat, rhs)
-
         return np.array([
-            x_dot,
-            q_ddot[0],
-            th1_dot,
-            q_ddot[1],
-            th2_dot,
-            q_ddot[2]
+            [self.M + m1 + m2, M12, M13],
+            [M12, (m1 + m2) * L1 ** 2, M23],
+            [M13, M23, m2 * L2 ** 2],
         ], dtype=np.float64)
+
+    def bias_forces(self, state: np.ndarray) -> np.ndarray:
+        """C(q, q_dot) q_dot + G(q) + damping, so that M(q) q_ddot + bias = tau."""
+        x, x_dot, th1, th1_dot, th2, th2_dot = state
+        m1, m2, L1, L2, g = self.m1, self.m2, self.L1, self.L2, self.g
+        s1, s2, s12 = np.sin(th1), np.sin(th2), np.sin(th1 - th2)
+        return np.array([
+            self.b_x * x_dot - (m1 + m2) * L1 * th1_dot ** 2 * s1 - m2 * L2 * th2_dot ** 2 * s2,
+            (m1 + m2) * g * L1 * s1 + m2 * L1 * L2 * th2_dot ** 2 * s12 + self.b_theta1 * th1_dot,
+            m2 * g * L2 * s2 - m2 * L1 * L2 * th1_dot ** 2 * s12 + self.b_theta2 * th2_dot,
+        ], dtype=np.float64)
+
+    def compute_derivatives(self, state: np.ndarray, force: float, disturbance_force: float = 0.0) -> np.ndarray:
+        """Calculates state derivative [x_dot, x_ddot, theta1_dot, theta1_ddot, theta2_dot, theta2_ddot].
+
+        Solves: M(q) * q_ddot = tau - bias(q, q_dot), with tau = [F, 0, 0] + J^T F_d.
+        A horizontal disturbance F_d acting on the payload maps to generalized forces via
+        J^T F with payload x-position x + L1*sin(th1) + L2*sin(th2).
+        """
+        th1, th2 = state[2], state[4]
+        tau = np.array([
+            force + disturbance_force,
+            disturbance_force * self.L1 * np.cos(th1),
+            disturbance_force * self.L2 * np.cos(th2),
+        ])
+        q_ddot = np.linalg.solve(self.mass_matrix(state), tau - self.bias_forces(state))
+        return np.array([state[1], q_ddot[0], state[3], q_ddot[1], state[5], q_ddot[2]], dtype=np.float64)
 
     def rk4_step(self, state: np.ndarray, force: float, dt: float, disturbance_force: float = 0.0) -> np.ndarray:
         """Advances state by dt using 4th order Runge-Kutta integration."""

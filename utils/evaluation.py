@@ -10,6 +10,8 @@ from envs.scenario import Scenario
 def rollout(env: DoublePendulumCraneEnv, controller, scenario: Scenario) -> Dict[str, np.ndarray]:
     """Run one full episode on a fixed scenario and record the trajectory."""
     obs, info = env.reset(options={"scenario": scenario})
+    if hasattr(controller, "reset"):
+        controller.reset()
     traj = {k: [] for k in ("t", "x", "x_dot", "th1", "th2", "u", "gust", "reward", "settled", "payload_x")}
     done = False
     while not done:
