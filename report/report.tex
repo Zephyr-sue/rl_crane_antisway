@@ -102,12 +102,18 @@ built on the nominal model ($m_2{=}2$, $L_1{=}1$, $L_2{=}0.8$) and following a q
 
 \textbf{Where the RBF controller fails.} With only the trolley actuated, the computed-traction law reaches the sway only through the inertia coupling of $M_0(q)$. Its quintic reference is also fixed in advance, so the controller cannot exploit the sway. Online RBF adaptation barely helps: on our tuning set, success was 57\% with adaptation and 63\% with $\gamma{=}0$. Neural compensation of model error cannot create the missing actuation. The heatmap (Fig.~\ref{fig:heat}) shows the RBF controller degrading quickly with longer cables (slower, more strongly coupled modes) and light payloads, where the hook dominates the dynamics. GRPO stays near 100\% over most of the training box and degrades gracefully outside it, failing mainly beyond 2.6\,m of cable, which was never seen in training.
 
-\textbf{Ablations} (Fig.~\ref{fig:curves}, random scenarios). %ABLATIONS%
+\textbf{Ablations} (Fig.~\ref{fig:curves}; 100 random test scenarios; ablation runs use 120 iterations, the main run 250).
 
-\textbf{Compute.} One GRPO iteration simulates $64{\times}32$ cranes for 600 steps (1.2M transitions) in about 12\,s on an RTX 3050 Ti laptop GPU. GRPO passes 85\% validation success within about 3\,min. It is sample-hungry (tens of millions of steps), but cheap simulation makes this inexpensive in wall-clock time, and it needs no value network.
+\begin{itemize}
+\item \emph{Success saturates for every variant} (rtg 94\%, outcome 96\%, process 95\%), but the return separates them: rtg 61, outcome 45, process $-7$.
+\item \emph{The paper's process advantage is worst} (also 32$^\circ$ peak sway). Its suffix sums over 600 dense steps carry a time-dependent offset shared by every trajectory, so early actions get advantages unrelated to their quality. Outcome supervision works well.
+\item \emph{Hiding $(m_2,L_1,L_2)$} keeps 94\% success (return 48, $t_s$ 7.3\,s). The memoryless policy is robust to the plant without being told the parameters, so no load cell or rope encoder is required.
+\end{itemize}
+
+\textbf{Compute.} One iteration (1.2M transitions) takes about 12\,s on an RTX 3050 Ti laptop GPU, and GRPO passes 85\% validation success within about 3\,min. It is sample-hungry, but cheap batched simulation makes that affordable.
 
 \section{Conclusion}
-A critic-free, group-relative policy gradient, carried over from LLM reasoning to physical control, learns a robust anti-sway controller for the double-pendulum crane. Replaying the same scenario across a group gives a low-variance baseline for free, and a GPU-batched simulator makes the large number of rollouts practical. The learned policy outperforms a model-based RBF adaptive controller in positioning speed, residual sway and robustness to plant variation and gusts.
+Critic-free GRPO transfers from LLM reasoning to physical control. Replaying the same scenario across a group gives a low-variance baseline for free. The learned policy beats the RBF adaptive controller in speed, residual sway and robustness.
 
 
 \bibliographystyle{IEEEtran}
