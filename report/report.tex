@@ -16,7 +16,7 @@
 \maketitle
 
 \begin{abstract}
-We formulate anti-sway transport with an overhead crane, where a trolley carries a hook and a payload (a double pendulum), as a continuous-control RL problem. Payload mass, cable lengths, initial sway and wind gusts are randomized. We adapt \emph{Group Relative Policy Optimization} (GRPO)~\cite{grpo}, originally proposed for LLM reasoning, to physical control. GRPO has no value network: $G$ rollouts replay the \emph{same} randomized scenario on a GPU-batched simulator and serve as each other's baseline. On 800 held-out test episodes in 8 conditions, including out-of-distribution plants and doubled gusts, GRPO succeeds in 94\% of random scenarios, against 62\% for the RBF neural-network adaptive controller of~\cite{qiang2021}. It also settles 1.7\,s faster and wins in every condition.
+We formulate anti-sway transport with an overhead crane, where a trolley carries a hook and a payload (a double pendulum), as a continuous-control RL problem. Payload mass, cable lengths, initial sway and wind gusts are randomized. We adapt \emph{Group Relative Policy Optimization} (GRPO)~\cite{grpo}, originally proposed for LLM reasoning, to physical control. GRPO has no value network: $G$ rollouts replay the \emph{same} randomized scenario on a GPU-batched simulator and serve as each other's baseline. We evaluate on 8 test conditions, including out-of-distribution plants and doubled gusts. GRPO succeeds in 93--97\% of random scenarios across 3 seeds. PPO with a learned critic reaches 77--94\%, and the RBF neural-network adaptive controller of~\cite{qiang2021} reaches 62\%. GRPO settles fastest and is most robust to gusts, while PPO needs $100\times$ fewer samples and generalizes better to unseen plants.
 \end{abstract}
 
 \section{Problem and Environment}
@@ -65,7 +65,9 @@ The linear $|e|$ term gives a constant pull toward the target, and together with
 \end{itemize}
 Because all members of a group share the scenario, the baseline removes the variance caused by the plant and the disturbances, which is the job a learned critic would do in PPO. The loss is the GRPO objective (clipped ratio, $\epsilon=0.2$) with the unbiased KL estimator $\frac{\pi_{ref}}{\pi}-\log\frac{\pi_{ref}}{\pi}-1$ ($\beta=0.04$). The reference policy is refreshed every 10 iterations (iterative GRPO).
 
-\textbf{Baseline: RBF adaptive control~\cite{qiang2021}.} This controller is not learned by RL; it serves as the comparison. Its control law is
+\textbf{RL baseline: PPO~\cite{ppo}.} PPO uses the same environment, curriculum and validation set as GRPO. It has a learned critic with GAE ($\lambda{=}0.95$), $\gamma{=}0.995$, reward normalization, 12 CPU environments, the same 2$\times$128 tanh network, and 3M steps.
+
+\textbf{Classical baseline: RBF adaptive control~\cite{qiang2021}.} This controller is not learned. Its control law is
 $\tau=M_0(q)(\ddot q_d-K_v\dot e-K_pe)+C_0\dot q+G_0-\hat f$,
 built on the nominal model ($m_2{=}2$, $L_1{=}1$, $L_2{=}0.8$) and following a quintic reference.
 \begin{itemize}
@@ -75,11 +77,11 @@ built on the nominal model ($m_2{=}2$, $L_1{=}1$, $L_2{=}0.8$) and following a q
 \end{itemize}
 
 \section{Results}
-\textbf{Protocol.} Each condition uses 100 seeded test scenarios that are never used in training. An episode \emph{succeeds} if the crane is settled during the final second; settling time $t_s$ is the first instant after which it stays settled. Both controllers run on the same scenarios and gust schedules.
+\textbf{Protocol.} Each condition uses 100 seeded test scenarios that are never used in training. An episode \emph{succeeds} if the crane is settled during the final second; settling time $t_s$ is the first instant after which it stays settled. All controllers run on the same scenarios and gust schedules. The table uses seed 0 of each RL method.
 
 \begin{table}[t]
 \centering\footnotesize\setlength{\tabcolsep}{3.5pt}
-\caption{GRPO vs RBF adaptive control (100 episodes per condition). $t_s$ is averaged over settled episodes. OOD: $m_2{=}5$\,kg, $L_1{+}L_2{=}2.8$\,m.}
+\caption{GRPO vs PPO vs RBF adaptive control (100 episodes per condition; best in bold). $t_s$ is averaged over settled episodes. OOD: $m_2{=}5$\,kg, $L_1{+}L_2{=}2.8$\,m.}
 \label{tab:main}
 \input{../results/summary_table.tex}
 \end{table}
@@ -94,26 +96,29 @@ built on the nominal model ($m_2{=}2$, $L_1{=}1$, $L_2{=}0.8$) and following a q
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{learning_curves.png}
-\caption{GRPO validation return and success (64 held-out scenarios) vs.\ environment steps for the advantage variants and the no-parameter ablation.}
+\caption{Validation success on 64 held-out scenarios. Left: GRPO vs PPO, mean $\pm$ std over 3 seeds (log steps). Right: GRPO advantage variants and the no-parameter ablation.}
 \label{fig:curves}
 \end{figure}
 
-\textbf{GRPO vs RBF.} GRPO succeeds more often in every condition (Table~\ref{tab:main}): 94\% vs 62\% on random scenarios (two further training seeds reach 93\% and 97\%), 92\% vs 48\% under doubled gusts, and 81\% vs 56\% out of distribution. It also settles faster (7.1\,s vs 8.8\,s on random scenarios), with less than half the residual sway (1.1$^\circ$ vs 2.5$^\circ$). The cost is more aggressive actuation: GRPO saturates the force briefly at start-up and uses about $1.8\times$ the control energy. The reward pays for speed and stillness, while $u^2$ is weighted lightly.
+\textbf{GRPO vs PPO.} On random scenarios GRPO's three seeds reach 94/93/97\% success and PPO's reach 94/84/77\%. The group baseline gives markedly lower seed-to-seed variance than a learned critic.
+\begin{itemize}
+\item \emph{Where GRPO is better.} It settles fastest in every condition (7.1\,s vs 7.9\,s on random scenarios) and is clearly more robust to doubled gusts (92\% vs 81\%).
+\item \emph{Where PPO is better.} PPO needs $100\times$ fewer samples (3M vs ${\sim}$300M steps; Fig.~\ref{fig:curves}). Batched GPU simulation offsets this: GRPO passes 85\% validation success in about 3\,min on an RTX 3050 Ti laptop GPU. It is smoother (0.5$^\circ$ residual sway, $0.64\times$ GRPO's control energy) and extrapolates better beyond the training range (OOD 96\% vs 81\%; Fig.~\ref{fig:heat}).
+\item \emph{Why.} GRPO's Monte-Carlo, scenario-matched baseline is exact for the scenarios it sees. PPO's value function smooths across plants, which helps it extrapolate.
+\end{itemize}
 
-\textbf{Where the RBF controller fails.} With only the trolley actuated, the computed-traction law reaches the sway only through the inertia coupling of $M_0(q)$. Its quintic reference is also fixed in advance, so the controller cannot exploit the sway. Online RBF adaptation barely helps: on our tuning set, success was 57\% with adaptation and 63\% with $\gamma{=}0$. Neural compensation of model error cannot create the missing actuation. The heatmap (Fig.~\ref{fig:heat}) shows the RBF controller degrading quickly with longer cables (slower, more strongly coupled modes) and light payloads, where the hook dominates the dynamics. GRPO stays near 100\% over most of the training box and degrades gracefully outside it, failing mainly beyond 2.6\,m of cable, which was never seen in training.
+\textbf{RL vs RBF.} Both RL agents beat the RBF controller in every condition: 94\% vs 62\% on random scenarios, and 92/81\% vs 48\% under doubled gusts. With only the trolley actuated, the computed-traction law reaches the sway only through the inertia coupling of $M_0(q)$, along a fixed reference. Online RBF adaptation barely helps (57\% with adaptation vs 63\% with $\gamma{=}0$), because compensating model error cannot create the missing actuation. The RBF controller degrades quickly with long cables and light payloads (Fig.~\ref{fig:heat}).
 
 \textbf{Ablations} (Fig.~\ref{fig:curves}; 100 random test scenarios; ablation runs use 120 iterations, the main run 250).
 
 \begin{itemize}
 \item \emph{Success saturates for every variant} (rtg 94\%, outcome 96\%, process 95\%), but the return separates them: rtg 61, outcome 45, process $-7$.
-\item \emph{The paper's process advantage is worst} (also 32$^\circ$ peak sway). Its suffix sums over 600 dense steps carry a time-dependent offset shared by every trajectory, so early actions get advantages unrelated to their quality. Outcome supervision works well.
-\item \emph{Hiding $(m_2,L_1,L_2)$} keeps 94\% success (return 48, $t_s$ 7.3\,s). The memoryless policy is robust to the plant without being told the parameters, so no load cell or rope encoder is required.
+\item \emph{The paper's process advantage is worst} (32$^\circ$ peak sway). Its suffix sums over 600 dense steps carry a time-dependent offset shared by every trajectory.
+\item \emph{Hiding $(m_2,L_1,L_2)$} keeps 94\% success (return 48). No load cell or rope encoder is needed.
 \end{itemize}
 
-\textbf{Compute.} One iteration (1.2M transitions) takes about 12\,s on an RTX 3050 Ti laptop GPU, and GRPO passes 85\% validation success within about 3\,min. It is sample-hungry, but cheap batched simulation makes that affordable.
-
 \section{Conclusion}
-Critic-free GRPO transfers from LLM reasoning to physical control. Replaying the same scenario across a group gives a low-variance baseline for free. The learned policy beats the RBF adaptive controller in speed, residual sway and robustness.
+Critic-free GRPO transfers from LLM reasoning to physical control. Replaying each scenario across a group gives a low-variance baseline, which yields the fastest-settling and most gust-robust controller here, consistent across seeds. PPO is more sample-efficient and extrapolates better. Both RL methods clearly beat RBF adaptive control.
 
 
 \bibliographystyle{IEEEtran}

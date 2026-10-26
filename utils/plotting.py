@@ -44,22 +44,24 @@ def read_progress(path: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def _mean_curve(files, xcol, metric, scale):
+def _mean_curve(files, xcol, metric, scale, log=False):
     curves = [df for f in files if len(df := read_progress(f)) > 1]
     if not curves:
         return None
-    grid = np.linspace(0, min(c[xcol].max() for c in curves), 100)
+    hi = min(c[xcol].max() for c in curves)
+    lo = max(5e4, max(c[xcol][c[xcol] > 0].min() for c in curves))
+    grid = np.geomspace(lo, hi, 100) if log else np.linspace(0, hi, 100)
     ys = np.stack([np.interp(grid, c[xcol], c[metric]) for c in curves])
     return grid / scale, ys.mean(0), ys.std(0), len(curves)
 
 
 def plot_learning_curves(runs_dir: str, out_path: str):
-    """Left: GRPO vs PPO validation success vs wall-clock time (mean +/- std over seeds).
+    """Left: GRPO vs PPO validation success vs environment steps (log scale, mean +/- std over seeds).
     Right: GRPO advantage variants and the no-parameter ablation vs environment steps."""
     setup_style()
     fig, axes = plt.subplots(1, 2, figsize=(3.6, 1.9))
     for label, pattern in [("GRPO", "grpo_seed*"), ("PPO", "ppo_seed*")]:
-        res = _mean_curve(sorted(glob.glob(os.path.join(runs_dir, pattern, "progress.csv"))), "wall_time", "val_success", 60.0)
+        res = _mean_curve(sorted(glob.glob(os.path.join(runs_dir, pattern, "progress.csv"))), "env_steps", "val_success", 1e6, log=True)
         if res:
             x, m, sd, n = res
             axes[0].plot(x, m, color=COLORS[label], label=f"{label} ({n} seeds)" if n > 1 else label)
@@ -71,13 +73,15 @@ def plot_learning_curves(runs_dir: str, out_path: str):
             axes[1].plot(x, m, color=VARIANT_COLORS[label], label=label)
             if n > 1:
                 axes[1].fill_between(x, m - sd, m + sd, color=VARIANT_COLORS[label], alpha=0.2, linewidth=0)
-    axes[0].set_xlabel("Wall-clock time (min)", fontsize=7)
+    axes[0].set_xscale("log")
+    axes[0].set_xlabel("Env. steps (M, log)", fontsize=7)
     axes[1].set_xlabel("GRPO env. steps (M)", fontsize=7)
     for ax in axes:
         ax.set_ylabel("Validation success", fontsize=7)
         ax.tick_params(labelsize=6)
         ax.set_ylim(0.5, 1.0)
         ax.legend(loc="lower right", fontsize=5.5)
+    axes[0].legend(loc="upper left", fontsize=5.5)
     fig.tight_layout()
     fig.savefig(out_path)
     plt.close(fig)
@@ -138,7 +142,7 @@ def plot_heatmaps(grids: dict, m2_vals, l_vals, out_path: str, train_box=None):
             (l0, l1), (m0, m1) = train_box
             ax.add_patch(plt.Rectangle((l0, m0), l1 - l0, m1 - m0, fill=False, edgecolor=INK, linestyle="--", linewidth=1.0))
         ax.set_title(name)
-        ax.set_xlabel(r"Cable length $L_1+L_2$ (m)")
+        ax.set_xlabel(r"$L_1+L_2$ (m)")
         ax.grid(False)
     axes[0].set_ylabel(r"Payload mass $m_2$ (kg)")
     fig.colorbar(im, ax=axes, shrink=0.9, label="Success rate")

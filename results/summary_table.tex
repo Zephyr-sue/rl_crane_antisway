@@ -1,15 +1,15 @@
-\begin{tabular}{l cc cc cc}
+\begin{tabular}{l ccc ccc}
 \toprule
-& \multicolumn{2}{c}{Success (\%)} & \multicolumn{2}{c}{$t_s$ (s)} & \multicolumn{2}{c}{Max sway ($^\circ$)} \\
-Condition & GRPO & RBF & GRPO & RBF & GRPO & RBF \\
+& \multicolumn{3}{c}{Success (\%)} & \multicolumn{3}{c}{$t_s$ (s)} \\
+Condition & GRPO & PPO & RBF & GRPO & PPO & RBF \\
 \midrule
-Nominal & 100 & 71 & 7.1 & 9.2 & 29.8 & 24.8 \\
-Random & 94 & 62 & 7.1 & 8.8 & 29.7 & 26.6 \\
-Heavy & 100 & 72 & 6.7 & 8.5 & 26.9 & 24.0 \\
-Light & 48 & 23 & 9.0 & 9.3 & 50.2 & 48.5 \\
-Long cable & 73 & 31 & 8.9 & 10.5 & 28.2 & 27.8 \\
-Short cable & 100 & 75 & 6.4 & 8.6 & 37.3 & 27.1 \\
-Strong gusts & 92 & 48 & 7.0 & 9.0 & 33.3 & 29.2 \\
-OOD & 81 & 56 & 8.2 & 9.9 & 23.7 & 23.6 \\
+Nominal & \textbf{100} & 96 & 71 & \textbf{7.1} & 8.0 & 9.2 \\
+Random & \textbf{94} & \textbf{94} & 62 & \textbf{7.1} & 7.9 & 8.8 \\
+Heavy & \textbf{100} & 97 & 72 & \textbf{6.7} & 7.7 & 8.5 \\
+Light & 48 & \textbf{56} & 23 & 9.0 & \textbf{8.9} & 9.3 \\
+Long cable & 73 & \textbf{78} & 31 & \textbf{8.9} & 8.9 & 10.5 \\
+Short cable & \textbf{100} & \textbf{100} & 75 & \textbf{6.4} & 7.4 & 8.6 \\
+Strong gusts & \textbf{92} & 81 & 48 & \textbf{7.0} & 8.3 & 9.0 \\
+OOD & 81 & \textbf{96} & 56 & \textbf{8.2} & 8.2 & 9.9 \\
 \bottomrule
 \end{tabular}

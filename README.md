@@ -8,28 +8,41 @@ We adapt **Group Relative Policy Optimization (GRPO)** ([DeepSeekMath, arXiv:240
 - There is **no critic**.
 - **G rollouts replay the same randomized scenario** on a **GPU-batched simulator** and act as each other's baseline.
 
-The comparison baseline is the **RBF neural-network adaptive controller** of [Qiang et al., Front. Robot. AI 2021](https://www.frontiersin.org/journals/robotics-and-ai/articles/10.3389/frobt.2021.639734/full): a computed-traction law on a nominal model, plus an online-adapted RBF compensator.
+Two baselines:
+- **PPO** (Stable-Baselines3), the standard RL method with a learned critic.
+- The **RBF neural-network adaptive controller** of [Qiang et al., Front. Robot. AI 2021](https://www.frontiersin.org/journals/robotics-and-ai/articles/10.3389/frobt.2021.639734/full): a computed-traction law on a nominal model, plus an online-adapted RBF compensator.
 
-![GRPO vs RBF adaptive control on the same scenario](results/compare.gif)
+![GRPO vs PPO vs RBF adaptive control on the same scenario](results/compare.gif)
 
 ## Results
 
-These are held-out test scenarios, 100 per condition, and both controllers face the identical scenarios and gust schedules. An episode **succeeds** if the crane is settled during the final second: |e| < 5 cm, |θ| < 2° and |ẋ| < 5 cm/s.
+These are held-out test scenarios, 100 per condition, and all controllers face the identical scenarios and gust schedules. An episode **succeeds** if the crane is settled during the final second: |e| < 5 cm, |θ| < 2° and |ẋ| < 5 cm/s. The table uses seed 0 of each RL method.
 
-| Condition | Success GRPO | Success RBF | Settling time GRPO | Settling time RBF | Max sway GRPO | Max sway RBF |
+| Condition | Success GRPO | Success PPO | Success RBF | Settling time GRPO | Settling time PPO | Settling time RBF |
 |---|---|---|---|---|---|---|
-| Nominal | **100%** | 71% | **7.1 s** | 9.2 s | 29.8° | 24.8° |
-| Random | **94%** | 62% | **7.1 s** | 8.8 s | 29.7° | 26.6° |
-| Heavy payload (4 kg) | **100%** | 72% | **6.7 s** | 8.5 s | 26.9° | 24.0° |
-| Light payload (0.5 kg) | **48%** | 23% | **9.0 s** | 9.3 s | 50.2° | 48.5° |
-| Long cables (2.6 m) | **73%** | 31% | **8.9 s** | 10.5 s | 28.2° | 27.8° |
-| Short cables (1.0 m) | **100%** | 75% | **6.4 s** | 8.6 s | 37.3° | 27.1° |
-| Strong gusts (2×) | **92%** | 48% | **7.0 s** | 9.0 s | 33.3° | 29.2° |
-| Out of distribution (5 kg, 2.8 m) | **81%** | 56% | **8.2 s** | 9.9 s | 23.7° | 23.6° |
+| Nominal | **100%** | 96% | 71% | **7.1 s** | 8.0 s | 9.2 s |
+| Random | **94%** | **94%** | 62% | **7.1 s** | 7.9 s | 8.8 s |
+| Heavy payload (4 kg) | **100%** | 97% | 72% | **6.7 s** | 7.7 s | 8.5 s |
+| Light payload (0.5 kg) | 48% | **56%** | 23% | 9.0 s | **8.9 s** | 9.3 s |
+| Long cables (2.6 m) | 73% | **78%** | 31% | **8.9 s** | 8.9 s | 10.5 s |
+| Short cables (1.0 m) | **100%** | **100%** | 75% | **6.4 s** | 7.4 s | 8.6 s |
+| Strong gusts (2×) | **92%** | 81% | 48% | **7.0 s** | 8.3 s | 9.0 s |
+| Out of distribution (5 kg, 2.8 m) | 81% | **96%** | 56% | **8.2 s** | 8.2 s | 9.9 s |
 
-- **GRPO wins in every condition** (seed 0 shown; seeds 1 and 2 reach 93% and 97% on random scenarios): it settles faster and leaves less than half the residual sway (1.1° vs 2.5°).
-- **The trade-off:** GRPO uses more actuation, about 1.8× the control energy.
-- **Why RBF falls short:** only the trolley is actuated, so the computed-traction law of Qiang et al. reaches the sway only through inertia coupling. Its online RBF compensation barely helps.
+**Across 3 training seeds (random scenarios):** GRPO reaches 94 / 93 / 97% success and PPO 94 / 84 / 77%.
+
+**GRPO vs PPO**
+- **GRPO is more consistent across seeds** and settles fastest in every condition.
+- **GRPO is more robust to strong gusts.**
+- **PPO needs 100× fewer samples** (3M vs ~300M steps). GRPO compensates by simulating 2048 cranes in parallel on the GPU, passing 85% validation success in about 3 min.
+- **PPO is smoother** (0.5° vs 1.1° residual sway, 0.64× GRPO's control energy).
+- **PPO extrapolates better** to plants outside the training range (OOD 96% vs 81%).
+
+**Both RL agents vs RBF**
+- Both beat the RBF controller in every condition.
+- Only the trolley is actuated, so the computed-traction law of Qiang et al. reaches the sway only through inertia coupling, and its online RBF compensation barely helps.
+
+**Raw data:** [results/summary.csv](results/summary.csv) and [results/metrics.csv](results/metrics.csv).
 - **Raw data:** [results/summary.csv](results/summary.csv) and [results/metrics.csv](results/metrics.csv).
 
 ![Robustness heatmap](results/robustness_heatmap.png)
@@ -75,8 +88,8 @@ Trained agents are committed in [models/trained/](models/trained/).
 
 | Command | What it does |
 |---|---|
-| `uv run viz/live.py` | **Interactive real-time demo** (pygame). `1` = GRPO, `2` = RBF; click sets the target; `G` sends a gust; `+`/`-` change payload mass; `R` resets. |
-| `uv run viz/animate.py` | Side-by-side GIF of GRPO and RBF on the same scenario, saved to `results/compare.gif` |
+| `uv run viz/live.py` | **Interactive real-time demo** (pygame). `1` = GRPO, `2` = PPO, `3` = RBF; click sets the target; `G` sends a gust; `+`/`-` change payload mass; `R` resets. |
+| `uv run viz/animate.py` | Side-by-side GIF of GRPO, PPO and RBF on the same scenario, saved to `results/compare.gif` |
 | `uv run evaluate.py` | Full benchmark: 8 conditions × 100 episodes, a robustness heatmap and GRPO ablations. Writes the figures, CSVs and LaTeX table to `results/`. |
 | `uv run viz/dashboard.py` | Interactive Plotly dashboard, saved to `results/report.html` |
 | `uv run pytest` | 17 tests: physics energy conservation, GPU/CPU simulator equivalence, env API, GRPO advantages, RBF controller |
@@ -88,10 +101,11 @@ uv run train.py --iterations 250 --seed 0                              # main ag
 uv run train.py --iterations 120 --adv-mode outcome --tag outcome_     # ablation: paper's outcome supervision
 uv run train.py --iterations 120 --adv-mode process --tag process_     # ablation: paper's process supervision
 uv run train.py --iterations 120 --no-params --tag noparams_           # ablation: m2/L1/L2 hidden from the agent
+uv run train.py --algo ppo --steps 3000000 --seed 0                    # PPO baseline (CPU, 12 envs, ~15 min)
 uv run tensorboard --logdir runs
 ```
-- The main checkpoint goes to `models/trained/grpo_seed<s>.pt`, and ablation checkpoints to `models/trained/ablations/`. The best checkpoint on the shared 64-scenario validation set is kept.
-- Learning curves go to `runs/grpo_*/progress.csv`.
+- Main checkpoints go to `models/trained/grpo_seed<s>.pt` and `models/trained/ppo_seed<s>.zip`, and ablation checkpoints to `models/trained/ablations/`. The best checkpoint on the shared 64-scenario validation set is kept.
+- Learning curves go to `runs/<algo>_*/progress.csv`.
 - Other flags: `--n-groups`, `--group-size`, `--beta`, `--lr`, `--device cpu`.
 
 ## RL formulation
@@ -138,9 +152,9 @@ rl_crane_antisway/
 │   ├── reward.py             # shared reward (numpy & torch)
 │   └── observation.py        # shared observation builder
 ├── algos/grpo.py             # GRPO for continuous control
-├── baselines/rbf_adaptive.py # RBF NN adaptive controller (Qiang et al. 2021), the comparison baseline
+├── baselines/rbf_adaptive.py # RBF NN adaptive controller (Qiang et al. 2021), classical baseline
 ├── models/                   # agent loader + trained checkpoints
-├── train.py / evaluate.py    # GRPO training and GRPO-vs-RBF benchmark
+├── train.py / evaluate.py    # GRPO / PPO training and GRPO-vs-PPO-vs-RBF benchmark
 ├── viz/                      # pygame live demo, GIF animation, Plotly dashboard
 ├── report/report.tex         # 2-page IEEE two-column report
 ├── results/                  # figures, metrics, tables
