@@ -109,7 +109,7 @@ table {{ border-collapse:collapse; font-size:14px }} th, td {{ padding:6px 12px;
 th:first-child, td:first-child {{ text-align:left }}
 </style></head><body>
 <h1>RL anti-sway control of a double-pendulum crane</h1>
-<p class="sub">GRPO (critic-free, group-relative policy optimization) vs the RBF neural-network adaptive controller of Qiang et al. (2021).</p>
+<p class="sub">GRPO (critic-free, group-relative policy optimization) vs PPO (learned critic) vs the RBF neural-network adaptive controller of Qiang et al. (2021).</p>
 <section><h2>Side-by-side rollout</h2>{gif_tag("compare.gif")}</section>
 <section><h2>Overall (mean over all test conditions)</h2>{overall.to_html(classes="t", border=0)}</section>
 {ablation_html}

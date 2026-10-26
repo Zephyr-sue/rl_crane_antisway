@@ -1,4 +1,4 @@
-"""Benchmark the trained GRPO agent against the RBF adaptive controller; produce all figures/tables.
+"""Benchmark GRPO against PPO and the RBF adaptive controller; produce all figures/tables.
 
 Examples:
     uv run evaluate.py                   # full benchmark (100 episodes per condition) + heatmap + ablations
@@ -19,7 +19,7 @@ from utils import plotting
 
 RESULTS = "results"
 EVAL_SEED = 7
-CONTROLLERS = ["GRPO", "RBF"]
+CONTROLLERS = ["GRPO", "PPO", "RBF"]
 
 # Test conditions: name -> (scenario overrides, gust intensity multiplier)
 CONDITIONS = {
@@ -47,14 +47,16 @@ def make_scenarios(condition: str, n: int, seed: int = EVAL_SEED):
 
 
 def make_controller(name: str):
-    """'GRPO', 'RBF', or a path to any GRPO checkpoint (used for ablations)."""
+    """'GRPO', 'PPO', 'RBF', or a path to any trained checkpoint (used for ablations)."""
     import torch
     torch.set_num_threads(1)
     from baselines import RBFAdaptiveController
     from models import load_agent
     if name == "RBF":
         return RBFAdaptiveController()
-    return load_agent(default_path() if name == "GRPO" else name, device="cpu")
+    if name in ("GRPO", "PPO"):
+        return load_agent(default_path(0, name.lower()), device="cpu")
+    return load_agent(name, device="cpu")
 
 
 def _eval_job(job):
@@ -129,16 +131,20 @@ def summarize(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def write_latex_table(summary: pd.DataFrame, path: str):
-    """Per-condition success / settling time / max sway for GRPO and RBF."""
-    lines = [r"\begin{tabular}{l cc cc cc}", r"\toprule",
-             r"& \multicolumn{2}{c}{Success (\%)} & \multicolumn{2}{c}{$t_s$ (s)} & \multicolumn{2}{c}{Max sway ($^\circ$)} \\",
-             r"Condition & GRPO & RBF & GRPO & RBF & GRPO & RBF \\", r"\midrule"]
+    """Per-condition success and settling time for every controller (best in bold)."""
+    n = len(CONTROLLERS)
+    head = " & ".join(CONTROLLERS)
+    lines = [r"\begin{tabular}{l " + "c" * n + " " + "c" * n + "}", r"\toprule",
+             r"& \multicolumn{%d}{c}{Success (\%%)} & \multicolumn{%d}{c}{$t_s$ (s)} \\" % (n, n),
+             r"Condition & %s & %s \\" % (head, head), r"\midrule"]
     for cond in CONDITIONS:
-        r = {c: summary[(summary.condition == cond) & (summary.controller == c)].iloc[0] for c in CONTROLLERS}
-        fmt_t = lambda v: "--" if np.isnan(v) else f"{v:.1f}"  # noqa: E731
-        lines.append(f"{cond} & {100 * r['GRPO'].success:.0f} & {100 * r['RBF'].success:.0f} & "
-                     f"{fmt_t(r['GRPO'].settle_time)} & {fmt_t(r['RBF'].settle_time)} & "
-                     f"{r['GRPO'].max_sway_deg:.1f} & {r['RBF'].max_sway_deg:.1f} \\\\")
+        rows = [summary[(summary.condition == cond) & (summary.controller == c)].iloc[0] for c in CONTROLLERS]
+        best_s = max(r.success for r in rows)
+        best_t = np.nanmin([r.settle_time for r in rows])
+        succ = [(r"\textbf{%.0f}" if r.success == best_s else "%.0f") % (100 * r.success) for r in rows]
+        ts = ["--" if np.isnan(r.settle_time) else
+              ((r"\textbf{%.1f}" if r.settle_time == best_t else "%.1f") % r.settle_time) for r in rows]
+        lines.append(cond + " & " + " & ".join(succ + ts) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}"]
     with open(path, "w") as f:
         f.write("\n".join(lines) + "\n")

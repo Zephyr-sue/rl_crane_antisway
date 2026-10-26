@@ -1,6 +1,6 @@
 """Animated crane GIF/MP4 (matplotlib): one controller, or several side by side on the same scenario.
 
-    uv run viz/animate.py                                 # GRPO vs RBF -> results/compare.gif
+    uv run viz/animate.py                                 # GRPO vs PPO vs RBF -> results/compare.gif
     uv run viz/animate.py --controllers GRPO --out results/grpo.gif
     uv run viz/animate.py --condition "Strong gusts" --index 2
 """
@@ -27,7 +27,7 @@ def animate(trajs: dict, out_path: str, stride: int = 3, fps: int = 17, title: s
     setup_style()
     names = list(trajs)
     n = len(names)
-    cols = min(n, 2)  # GRPO and RBF side by side
+    cols = min(n, 3)  # controllers side by side
     rows = int(np.ceil(n / cols))
     fig = plt.figure(figsize=(4.2 * cols, 2.3 * rows + 2.2))
     gs = fig.add_gridspec(rows + 1, cols, height_ratios=[1] * rows + [0.9])

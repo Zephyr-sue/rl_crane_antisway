@@ -17,6 +17,7 @@ dependencies = [
     "rich>=13.0",
     "pygame>=2.5",
     "plotly>=5.18",
+    "stable-baselines3>=2.3",
 ]
 
 [dependency-groups]

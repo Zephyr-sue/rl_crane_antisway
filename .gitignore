@@ -41,8 +41,6 @@ tb_logs/
 .idea/
 *.swp
 
-# Local-only comparison runs (not part of the submission)
-models/trained/*.zip
 report/*.aux
 report/*.log
 report/*.out

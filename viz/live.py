@@ -3,7 +3,7 @@
     uv run viz/live.py [--agent grpo]
 
 Keys:
-    1 GRPO   2 RBF adaptive baseline   (switch controller live)
+    1 GRPO   2 PPO   3 RBF adaptive baseline   (switch controller live)
     mouse click    set a new target position
     G              wind gust on the payload (hold for longer)
     + / -          change payload mass mid-run
@@ -22,7 +22,7 @@ from envs.double_pendulum_crane_env import DoublePendulumCraneEnv  # noqa: E402
 from evaluate import CONTROLLERS, make_controller  # noqa: E402
 from viz.renderer import CraneRenderer, SCALE, WIDTH  # noqa: E402
 
-KEYMAP = {"1": "GRPO", "2": "RBF"}
+KEYMAP = {"1": "GRPO", "2": "PPO", "3": "RBF"}
 
 
 def main():
@@ -96,7 +96,7 @@ def main():
         renderer.draw(env.state, env.dynamics, env.target_x, info["force"] / env.max_force, info["gust"],
                       env.current_step * env.dt,
                       hud_lines=[f"controller: {name}   [{status}]",
-                                 "1/2 ctrl  click target  G gust  +/- mass  R reset"],
+                                 "1-3 ctrl  click target  G gust  +/- mass  R reset"],
                       title=f"Controller: {name}")
     renderer.close()
 

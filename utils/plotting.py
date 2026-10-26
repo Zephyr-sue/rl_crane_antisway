@@ -13,15 +13,16 @@ import pandas as pd  # noqa: E402
 COLORS = {
     "GRPO": "#2a78d6",
     "RBF": "#eb6834",
+    "PPO": "#1baf7a",
 }
-# GRPO variants in the learning-curve figure (slot 1 = main run; RBF keeps slot 2)
-VARIANT_COLORS = {"rtg (main)": "#2a78d6", "outcome": "#1baf7a", "process": "#eda100", "no params": "#e87ba4"}
+# GRPO variants in the learning-curve figure (slot 1 = main run; RBF and PPO keep slots 2 and 3)
+VARIANT_COLORS = {"rtg (main)": "#2a78d6", "outcome": "#eda100", "process": "#e87ba4", "no params": "#6250d6"}
 VARIANT_RUNS = {"rtg (main)": "grpo_seed*", "outcome": "grpo_outcome_seed*", "process": "grpo_process_seed*",
                 "no params": "grpo_noparams_seed*"}
 INK = "#0b0b0b"
 INK_2 = "#52514e"
 GRID = "#e4e3df"
-ORDER = ["GRPO", "RBF"]
+ORDER = ["GRPO", "PPO", "RBF"]
 
 
 def setup_style():
@@ -43,30 +44,40 @@ def read_progress(path: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def _mean_curve(files, xcol, metric, scale):
+    curves = [df for f in files if len(df := read_progress(f)) > 1]
+    if not curves:
+        return None
+    grid = np.linspace(0, min(c[xcol].max() for c in curves), 100)
+    ys = np.stack([np.interp(grid, c[xcol], c[metric]) for c in curves])
+    return grid / scale, ys.mean(0), ys.std(0), len(curves)
+
+
 def plot_learning_curves(runs_dir: str, out_path: str):
-    """GRPO validation return and success vs env steps for the main run and each ablation (mean +/- std over seeds)."""
+    """Left: GRPO vs PPO validation success vs wall-clock time (mean +/- std over seeds).
+    Right: GRPO advantage variants and the no-parameter ablation vs environment steps."""
     setup_style()
     fig, axes = plt.subplots(1, 2, figsize=(3.6, 1.9))
+    for label, pattern in [("GRPO", "grpo_seed*"), ("PPO", "ppo_seed*")]:
+        res = _mean_curve(sorted(glob.glob(os.path.join(runs_dir, pattern, "progress.csv"))), "wall_time", "val_success", 60.0)
+        if res:
+            x, m, sd, n = res
+            axes[0].plot(x, m, color=COLORS[label], label=f"{label} ({n} seeds)" if n > 1 else label)
+            axes[0].fill_between(x, m - sd, m + sd, color=COLORS[label], alpha=0.2, linewidth=0)
     for label, pattern in VARIANT_RUNS.items():
-        curves = [df for f in sorted(glob.glob(os.path.join(runs_dir, pattern, "progress.csv")))
-                  if len(df := read_progress(f)) > 1]
-        if not curves:
-            continue
-        for ax, metric in [(axes[0], "val_return"), (axes[1], "val_success")]:
-            grid = np.linspace(0, min(c["env_steps"].max() for c in curves), 100)
-            ys = np.stack([np.interp(grid, c["env_steps"], c[metric]) for c in curves])
-            m, sd = ys.mean(0), ys.std(0)
-            seeds = f" ({len(curves)} seeds)" if len(curves) > 1 else ""
-            ax.plot(grid / 1e6, m, color=VARIANT_COLORS[label], label=label + seeds)
-            if len(curves) > 1:
-                ax.fill_between(grid / 1e6, m - sd, m + sd, color=VARIANT_COLORS[label], alpha=0.2, linewidth=0)
-    for ax, ylabel in [(axes[0], "Validation return"), (axes[1], "Validation success")]:
-        ax.set_xlabel("Env. steps (M)", fontsize=7)
-        ax.set_ylabel(ylabel, fontsize=7)
+        res = _mean_curve(sorted(glob.glob(os.path.join(runs_dir, pattern, "progress.csv"))), "env_steps", "val_success", 1e6)
+        if res:
+            x, m, sd, n = res
+            axes[1].plot(x, m, color=VARIANT_COLORS[label], label=label)
+            if n > 1:
+                axes[1].fill_between(x, m - sd, m + sd, color=VARIANT_COLORS[label], alpha=0.2, linewidth=0)
+    axes[0].set_xlabel("Wall-clock time (min)", fontsize=7)
+    axes[1].set_xlabel("GRPO env. steps (M)", fontsize=7)
+    for ax in axes:
+        ax.set_ylabel("Validation success", fontsize=7)
         ax.tick_params(labelsize=6)
-    axes[0].set_ylim(-300, max(50, axes[0].get_ylim()[1]))
-    axes[1].set_ylim(0.6, 1.0)
-    axes[1].legend(loc="lower right", fontsize=5.5)
+        ax.set_ylim(0.5, 1.0)
+        ax.legend(loc="lower right", fontsize=5.5)
     fig.tight_layout()
     fig.savefig(out_path)
     plt.close(fig)
