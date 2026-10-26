@@ -12,7 +12,43 @@ The comparison baseline is the **RBF neural-network adaptive controller** of [Qi
 
 ![GRPO vs RBF adaptive control on the same scenario](results/compare.gif)
 
-<!--RESULTS-->
+## Results
+
+These are held-out test scenarios, 100 per condition, and both controllers face the identical scenarios and gust schedules. An episode **succeeds** if the crane is settled during the final second: |e| < 5 cm, |θ| < 2° and |ẋ| < 5 cm/s.
+
+| Condition | Success GRPO | Success RBF | Settling time GRPO | Settling time RBF | Max sway GRPO | Max sway RBF |
+|---|---|---|---|---|---|---|
+| Nominal | **100%** | 71% | **7.1 s** | 9.2 s | 29.8° | 24.8° |
+| Random | **94%** | 62% | **7.1 s** | 8.8 s | 29.7° | 26.6° |
+| Heavy payload (4 kg) | **100%** | 72% | **6.7 s** | 8.5 s | 26.9° | 24.0° |
+| Light payload (0.5 kg) | **48%** | 23% | **9.0 s** | 9.3 s | 50.2° | 48.5° |
+| Long cables (2.6 m) | **73%** | 31% | **8.9 s** | 10.5 s | 28.2° | 27.8° |
+| Short cables (1.0 m) | **100%** | 75% | **6.4 s** | 8.6 s | 37.3° | 27.1° |
+| Strong gusts (2×) | **92%** | 48% | **7.0 s** | 9.0 s | 33.3° | 29.2° |
+| Out of distribution (5 kg, 2.8 m) | **81%** | 56% | **8.2 s** | 9.9 s | 23.7° | 23.6° |
+
+- **GRPO wins in every condition:** it settles faster and leaves less than half the residual sway (1.1° vs 2.5°).
+- **The trade-off:** GRPO uses more actuation, about 1.8× the control energy.
+- **Why RBF falls short:** only the trolley is actuated, so the computed-traction law of Qiang et al. reaches the sway only through inertia coupling. Its online RBF compensation barely helps.
+- **Raw data:** [results/summary.csv](results/summary.csv) and [results/metrics.csv](results/metrics.csv).
+
+![Robustness heatmap](results/robustness_heatmap.png)
+
+### GRPO ablations (random scenarios)
+
+| Variant | Success | Settling time | Return |
+|---|---|---|---|
+| **rtg** (per-timestep group-normalized return-to-go, default) | 94% | 7.1 s | **61** |
+| outcome (paper, one advantage per trajectory) | 96% | 7.0 s | 45 |
+| process (paper, suffix sum of normalized rewards) | 95% | 7.4 s | −7 |
+| rtg, plant parameters hidden from the agent | 94% | 7.3 s | 48 |
+
+Success saturates for every variant, but return separates them.
+- The paper's *process* advantage does worst on dense 600-step episodes. Its suffix sums carry a time-dependent offset that every trajectory in the group shares.
+- The policy does not need to be told m2, L1 and L2.
+
+![Learning curves](results/learning_curves.png)
+
 
 ## Installation
 
