@@ -50,6 +50,7 @@ class GRPOConfig:
     max_grad_norm: float = 0.5
     curriculum_frac: float = 0.3  # fraction of training to ramp scenario difficulty 0.3 -> 1.0
     observe_params: bool = True
+    residual: bool = False        # policy outputs a correction on top of the LQR prior: u = clip(u_LQR + du)
     seed: int = 0
 
 
@@ -110,6 +111,10 @@ class GRPO:
         obs_dim = 13 if config.observe_params else 10
         self.policy = GaussianPolicy(obs_dim, config.hidden, config.init_log_std).to(device)
         self.ref_policy = copy.deepcopy(self.policy).requires_grad_(False)
+        self.prior = None
+        if config.residual:
+            from baselines import LQRController
+            self.prior = LQRController()
         self.opt = torch.optim.Adam(self.policy.parameters(), lr=config.lr)
         self.env_steps = 0
         self.log_dir = log_dir
@@ -118,6 +123,15 @@ class GRPO:
             os.makedirs(log_dir, exist_ok=True)
             from torch.utils.tensorboard import SummaryWriter
             self.writer = SummaryWriter(log_dir)
+
+    def compose(self, obs: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+        """Executed force: the policy action itself, or the LQR prior plus the residual correction."""
+        if self.prior is None:
+            return a
+        return (self.prior.act_batch(obs) + a).clamp(-1.0, 1.0)
+
+    def act_deterministic(self, obs: torch.Tensor) -> torch.Tensor:
+        return self.compose(obs, self.policy.act_deterministic(obs))
 
     def level(self, it: int) -> float:
         ramp = max(1, int(self.cfg.curriculum_frac * self.cfg.iterations))
@@ -139,7 +153,7 @@ class GRPO:
             d = self.policy.dist(obs)
             a = d.sample()
             buf_obs[t], buf_act[t], buf_logp[t] = obs, a, d.log_prob(a)
-            obs, r, settled = self.env.step(a)
+            obs, r, settled = self.env.step(self.compose(obs, a))
             buf_rew[t] = r
         self.env_steps += T * B
         return buf_obs, buf_act, buf_logp, buf_rew, settled
@@ -195,7 +209,7 @@ class GRPO:
             train_return = rew.sum(0).mean().item()
             val_return, val_success = np.nan, np.nan
             if validate_fn is not None and (it % validate_every == 0 or it == cfg.iterations - 1):
-                val_return, val_success = validate_fn(lambda o: self.policy.act_deterministic(o))
+                val_return, val_success = validate_fn(self.act_deterministic)
                 if val_return > best_val:
                     best_val = val_return
                     self.save(save_path)
@@ -238,12 +252,19 @@ class GRPOAgent:
         self.policy.eval()
         self.device = device
         self.observe_params = cfg.get("observe_params", True)
+        self.prior = None
+        if cfg.get("residual", False):
+            from baselines import LQRController
+            self.prior = LQRController()
+            self.name = "Res-GRPO"
+
+    @torch.no_grad()
+    def act_batch(self, obs: torch.Tensor) -> torch.Tensor:
+        obs = obs.to(self.device)
+        u = self.policy.act_deterministic(obs)
+        return u if self.prior is None else (self.prior.act_batch(obs) + u).clamp(-1.0, 1.0)
 
     @torch.no_grad()
     def act(self, obs: np.ndarray) -> np.ndarray:
         o = torch.as_tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
-        return self.policy.act_deterministic(o).cpu().numpy().astype(np.float32)
-
-    @torch.no_grad()
-    def act_batch(self, obs: torch.Tensor) -> torch.Tensor:
-        return self.policy.act_deterministic(obs.to(self.device))
+        return self.act_batch(o).cpu().numpy().astype(np.float32)

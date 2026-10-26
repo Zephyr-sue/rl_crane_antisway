@@ -1,6 +1,6 @@
 """Animated crane GIF/MP4 (matplotlib): one controller, or several side by side on the same scenario.
 
-    uv run viz/animate.py                                 # GRPO vs PPO vs RBF -> results/compare.gif
+    uv run viz/animate.py                                 # all controllers -> results/compare.gif
     uv run viz/animate.py --controllers GRPO --out results/grpo.gif
     uv run viz/animate.py --condition "Strong gusts" --index 2
 """

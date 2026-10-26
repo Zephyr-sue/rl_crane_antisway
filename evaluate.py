@@ -1,4 +1,4 @@
-"""Benchmark GRPO against PPO and the RBF adaptive controller; produce all figures/tables.
+"""Benchmark GRPO and residual GRPO against PPO, LQR and the RBF adaptive controller; produce all figures/tables.
 
 Examples:
     uv run evaluate.py                   # full benchmark (100 episodes per condition) + heatmap + ablations
@@ -19,7 +19,7 @@ from utils import plotting
 
 RESULTS = "results"
 EVAL_SEED = 7
-CONTROLLERS = ["GRPO", "PPO", "RBF"]
+CONTROLLERS = ["Res-GRPO", "GRPO", "PPO", "LQR", "RBF"]
 
 # Test conditions: name -> (scenario overrides, gust intensity multiplier)
 CONDITIONS = {
@@ -47,13 +47,17 @@ def make_scenarios(condition: str, n: int, seed: int = EVAL_SEED):
 
 
 def make_controller(name: str):
-    """'GRPO', 'PPO', 'RBF', or a path to any trained checkpoint (used for ablations)."""
+    """'Res-GRPO', 'GRPO', 'PPO', 'LQR', 'RBF', or a path to any trained checkpoint (used for ablations)."""
     import torch
     torch.set_num_threads(1)
-    from baselines import RBFAdaptiveController
+    from baselines import LQRController, RBFAdaptiveController
     from models import load_agent
     if name == "RBF":
         return RBFAdaptiveController()
+    if name == "LQR":
+        return LQRController()
+    if name == "Res-GRPO":
+        return load_agent(default_path(0, "resgrpo"), device="cpu")
     if name in ("GRPO", "PPO"):
         return load_agent(default_path(0, name.lower()), device="cpu")
     return load_agent(name, device="cpu")

@@ -1,4 +1,4 @@
-"""Model-based reference controller (RBF adaptive control, Qiang et al. 2021) used as the baseline."""
+"""Classical model-based baselines: LQR and RBF adaptive control (Qiang et al. 2021)."""
 import numpy as np
 
 from envs.observation import POS_SCALE, VEL_SCALE, RATE_SCALE
@@ -16,6 +16,7 @@ def state_from_obs(obs: np.ndarray) -> np.ndarray:
     ])
 
 
+from baselines.lqr import LQRController  # noqa: E402
 from baselines.rbf_adaptive import RBFAdaptiveController  # noqa: E402
 
-__all__ = ["state_from_obs", "RBFAdaptiveController"]
+__all__ = ["state_from_obs", "LQRController", "RBFAdaptiveController"]

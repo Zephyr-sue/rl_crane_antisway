@@ -14,15 +14,17 @@ COLORS = {
     "GRPO": "#2a78d6",
     "RBF": "#eb6834",
     "PPO": "#1baf7a",
+    "LQR": "#eda100",
+    "Res-GRPO": "#6250d6",
 }
-# GRPO variants in the learning-curve figure (slot 1 = main run; RBF and PPO keep slots 2 and 3)
-VARIANT_COLORS = {"rtg (main)": "#2a78d6", "outcome": "#eda100", "process": "#e87ba4", "no params": "#6250d6"}
+# GRPO variants in the ablation panel (slot 1 = main run; other slots stay with their controllers)
+VARIANT_COLORS = {"rtg (main)": "#2a78d6", "outcome": "#e87ba4", "process": "#008300", "no params": "#e34948"}
 VARIANT_RUNS = {"rtg (main)": "grpo_seed*", "outcome": "grpo_outcome_seed*", "process": "grpo_process_seed*",
                 "no params": "grpo_noparams_seed*"}
 INK = "#0b0b0b"
 INK_2 = "#52514e"
 GRID = "#e4e3df"
-ORDER = ["GRPO", "PPO", "RBF"]
+ORDER = ["Res-GRPO", "GRPO", "PPO", "LQR", "RBF"]
 
 
 def setup_style():
@@ -56,11 +58,11 @@ def _mean_curve(files, xcol, metric, scale, log=False):
 
 
 def plot_learning_curves(runs_dir: str, out_path: str):
-    """Left: GRPO vs PPO validation success vs environment steps (log scale, mean +/- std over seeds).
+    """Left: Res-GRPO / GRPO / PPO validation success vs environment steps (log scale, mean +/- std over seeds).
     Right: GRPO advantage variants and the no-parameter ablation vs environment steps."""
     setup_style()
     fig, axes = plt.subplots(1, 2, figsize=(3.6, 1.9))
-    for label, pattern in [("GRPO", "grpo_seed*"), ("PPO", "ppo_seed*")]:
+    for label, pattern in [("Res-GRPO", "resgrpo_seed*"), ("GRPO", "grpo_seed*"), ("PPO", "ppo_seed*")]:
         res = _mean_curve(sorted(glob.glob(os.path.join(runs_dir, pattern, "progress.csv"))), "env_steps", "val_success", 1e6, log=True)
         if res:
             x, m, sd, n = res

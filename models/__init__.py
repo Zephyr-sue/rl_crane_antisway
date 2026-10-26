@@ -25,7 +25,7 @@ class SB3Agent:
 
 
 def default_path(seed: int = 0, algo: str = "grpo") -> str:
-    return os.path.join(TRAINED_DIR, f"{algo}_seed{seed}.{'pt' if algo == 'grpo' else 'zip'}")
+    return os.path.join(TRAINED_DIR, f"{algo}_seed{seed}.{'zip' if algo == 'ppo' else 'pt'}")
 
 
 def load_agent(path: str = None, device: str = "cpu"):

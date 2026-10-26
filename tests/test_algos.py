@@ -78,3 +78,33 @@ def test_rbf_positions_nominal_crane_without_gusts():
     sc.gusts[:] = 0
     m = episode_metrics(rollout(DoublePendulumCraneEnv(), RBFAdaptiveController(), sc))
     assert m["final_error_cm"] < 10.0
+
+
+def test_lqr_batched_matches_single_and_settles_nominal():
+    from baselines import LQRController
+    ctrl = LQRController()
+    env = DoublePendulumCraneEnv()
+    rng = np.random.default_rng(4)
+    for _ in range(5):
+        obs = env.observation_space.sample() * 0.05
+        obs[3] = obs[6] = 1.0                    # cos(theta) of a near-vertical state
+        single = ctrl.act(obs)
+        batched = ctrl.act_batch(torch.as_tensor(obs[None]))
+        np.testing.assert_allclose(single, batched.numpy(), atol=1e-5)
+    sc = sample_scenario(rng, randomize_params=False, level=0.3)
+    sc.gusts[:] = 0
+    assert episode_metrics(rollout(env, ctrl, sc))["success"] == 1.0
+
+
+def test_residual_grpo_starts_at_lqr_prior(tmp_path):
+    from algos.grpo import GRPOAgent
+    from baselines import LQRController
+    cfg = GRPOConfig(n_groups=2, group_size=4, iterations=1, minibatch_size=1024, epochs=1, residual=True)
+    agent = GRPO(cfg, torch.device("cpu"))
+    agent.env.max_steps = 20
+    agent.save(str(tmp_path / "r.pt"))                  # untrained: residual ~ 0
+    res = GRPOAgent(str(tmp_path / "r.pt"))
+    obs = np.zeros(13, dtype=np.float32)
+    obs[0], obs[3], obs[6] = 0.1, 1.0, 1.0
+    assert res.name == "Res-GRPO"
+    np.testing.assert_allclose(res.act(obs), LQRController().act(obs), atol=0.05)

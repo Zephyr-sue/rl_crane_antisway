@@ -3,6 +3,7 @@
 Examples:
     uv run train.py --iterations 250 --seed 0                                # GRPO main run
     uv run train.py --iterations 120 --adv-mode outcome --tag outcome_       # GRPO ablation
+    uv run train.py --residual --iterations 150 --seed 0                     # residual GRPO on top of LQR
     uv run train.py --algo ppo --steps 3000000 --seed 0                      # PPO baseline
 """
 import argparse
@@ -21,7 +22,7 @@ def checkpoint_path(args) -> str:
     """Main runs go to models/trained/; tagged (ablation) runs to models/trained/ablations/."""
     if args.out:
         return args.out
-    path = default_path(args.seed, args.algo)
+    path = default_path(args.seed, "resgrpo" if getattr(args, "residual", False) else args.algo)
     if args.tag:
         path = os.path.join(os.path.dirname(path), "ablations", args.tag + os.path.basename(path))
     return path
@@ -38,9 +39,11 @@ def train_grpo(args, device):
     cfg = GRPOConfig(
         n_groups=args.n_groups, group_size=args.group_size, iterations=args.iterations,
         adv_mode=args.adv_mode, beta=args.beta, lr=args.lr, seed=args.seed,
-        observe_params=not args.no_params,
+        observe_params=not args.no_params, residual=args.residual,
+        init_log_std=-1.5 if args.residual else -0.5,  # a residual starts near the LQR prior: explore less
     )
-    agent = GRPO(cfg, device, log_dir=os.path.join("runs", f"grpo_{args.tag}seed{args.seed}"))
+    run = f"{'resgrpo' if args.residual else 'grpo'}_{args.tag}seed{args.seed}"
+    agent = GRPO(cfg, device, log_dir=os.path.join("runs", run))
     agent.train(checkpoint_path(args), validate_fn=Validator(device, observe_params=cfg.observe_params))
 
 
@@ -119,6 +122,7 @@ def main():
     p.add_argument("--group-size", type=int, default=32, help="rollouts per scenario (G)")
     p.add_argument("--adv-mode", choices=["outcome", "process", "rtg"], default="rtg")
     p.add_argument("--beta", type=float, default=0.04, help="KL coefficient")
+    p.add_argument("--residual", action="store_true", help="residual GRPO: learn a correction on top of LQR")
     # PPO
     p.add_argument("--steps", type=int, default=3_000_000)
     p.add_argument("--n-envs", type=int, default=12)
