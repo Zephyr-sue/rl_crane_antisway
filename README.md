@@ -27,7 +27,7 @@ These are held-out test scenarios, 100 per condition, and both controllers face 
 | Strong gusts (2×) | **92%** | 48% | **7.0 s** | 9.0 s | 33.3° | 29.2° |
 | Out of distribution (5 kg, 2.8 m) | **81%** | 56% | **8.2 s** | 9.9 s | 23.7° | 23.6° |
 
-- **GRPO wins in every condition:** it settles faster and leaves less than half the residual sway (1.1° vs 2.5°).
+- **GRPO wins in every condition** (seed 0 shown; seeds 1 and 2 reach 93% and 97% on random scenarios): it settles faster and leaves less than half the residual sway (1.1° vs 2.5°).
 - **The trade-off:** GRPO uses more actuation, about 1.8× the control energy.
 - **Why RBF falls short:** only the trolley is actuated, so the computed-traction law of Qiang et al. reaches the sway only through inertia coupling. Its online RBF compensation barely helps.
 - **Raw data:** [results/summary.csv](results/summary.csv) and [results/metrics.csv](results/metrics.csv).
