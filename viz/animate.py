@@ -18,7 +18,7 @@ import numpy as np  # noqa: E402
 from matplotlib.animation import FuncAnimation, PillowWriter, FFMpegWriter  # noqa: E402
 
 from envs.double_pendulum_crane_env import DoublePendulumCraneEnv  # noqa: E402
-from evaluate import CONDITIONS, CONTROLLERS, make_controller, make_scenarios  # noqa: E402
+from evaluate import CONDITIONS, CONTROLLERS, canonical_name, make_controller, make_scenarios  # noqa: E402
 from utils.evaluation import rollout  # noqa: E402
 from utils.plotting import COLORS, GRID, INK, INK_2, setup_style  # noqa: E402
 
@@ -124,7 +124,7 @@ def main():
     p.add_argument("--stride", type=int, default=3)
     args = p.parse_args()
 
-    names = [c.upper() for c in args.controllers] if args.controllers else CONTROLLERS
+    names = [canonical_name(c) for c in args.controllers] if args.controllers else CONTROLLERS
     out = args.out or os.path.join("results", "compare.gif" if len(names) > 1 else f"{names[0].lower()}.gif")
 
     sc = make_scenarios(args.condition, args.index + 1)[args.index]

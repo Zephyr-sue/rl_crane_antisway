@@ -34,6 +34,14 @@ CONDITIONS = {
 }
 
 
+def canonical_name(name: str) -> str:
+    """Case-insensitive controller lookup: 'res-grpo' -> 'Res-GRPO'."""
+    for c in CONTROLLERS:
+        if c.lower() == name.lower():
+            return c
+    raise ValueError(f"unknown controller {name!r}; choose from {', '.join(CONTROLLERS)}")
+
+
 def make_scenarios(condition: str, n: int, seed: int = EVAL_SEED):
     overrides, gust_scale = CONDITIONS[condition]
     rng = np.random.default_rng([seed, list(CONDITIONS).index(condition)])

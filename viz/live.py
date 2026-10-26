@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np  # noqa: E402
 
 from envs.double_pendulum_crane_env import DoublePendulumCraneEnv  # noqa: E402
-from evaluate import CONTROLLERS, make_controller  # noqa: E402
+from evaluate import CONTROLLERS, canonical_name, make_controller  # noqa: E402
 from viz.renderer import CraneRenderer, SCALE, WIDTH  # noqa: E402
 
 KEYMAP = {"1": "GRPO", "2": "PPO", "3": "RBF", "4": "LQR", "5": "Res-GRPO"}
@@ -27,7 +27,7 @@ KEYMAP = {"1": "GRPO", "2": "PPO", "3": "RBF", "4": "LQR", "5": "Res-GRPO"}
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--agent", default="grpo")
+    p.add_argument("--agent", default="res-grpo", help="res-grpo | grpo | ppo | lqr | rbf")
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args()
 
@@ -44,7 +44,7 @@ def main():
         if hasattr(get(name), "reset"):
             get(name).reset()
 
-    name = args.agent.upper() if args.agent.upper() in available else available[0]
+    name = canonical_name(args.agent)
     env = DoublePendulumCraneEnv()  # truncation flag is ignored: the demo runs until quit
     renderer = CraneRenderer(headless=False, title="RL anti-sway crane")
     pg = renderer.pg
