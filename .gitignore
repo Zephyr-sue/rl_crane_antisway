@@ -27,7 +27,8 @@ wheels/
 *.egg
 
 # Logs and Checkpoints
-runs/
+# training logs: keep progress.csv (learning curves), skip TensorBoard event files
+runs/**/events.out.tfevents.*
 logs/
 checkpoints/
 tb_logs/
